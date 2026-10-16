@@ -28,6 +28,8 @@ wmal-monitor = "wmal.monitor.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
+exclude = ["wmal.training", "wmal.training.*"]
 
 [tool.setuptools.package-data]
 "wmal.monitor" = ["static/*.html", "static/*.css", "static/*.js"]
