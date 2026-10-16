@@ -56,7 +56,7 @@ python -m pip check
 本机已导入的数据可直接启动（输出目录必须新建/为空）：
 
 ```bash
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/lerobot_visual_av1_20260930/manifest.json \
   --output runs/lerobot_with_progress_run1 --device cuda --epochs 30
 # 同样的命令加 --no-progress 可关闭提示。
@@ -68,20 +68,20 @@ python scripts/visual_world.py train \
 
 ```bash
 export MUJOCO_GL=egl
-python scripts/visual_world.py collect \
+python ../world-model-training/scripts/visual_world.py collect \
   --output data/processed/visual_g1_run1 \
   --episodes 40 --steps 16 --image-size 64 --seed 30
 
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_run1/manifest.json \
   --output runs/visual_g1_run1 --device cuda --epochs 30
 
-python scripts/visual_world.py calibrate \
+python ../world-model-training/scripts/visual_world.py calibrate \
   --manifest data/processed/visual_g1_run1/manifest.json \
   --checkpoint runs/visual_g1_run1/best.pt \
   --output runs/visual_g1_run1/calibration.json --horizon 4 --alpha .2
 
-python scripts/visual_world.py evaluate \
+python ../world-model-training/scripts/visual_world.py evaluate \
   --manifest data/processed/visual_g1_run1/manifest.json \
   --checkpoint runs/visual_g1_run1/best.pt \
   --calibration runs/visual_g1_run1/calibration.json \
@@ -118,7 +118,7 @@ python scripts/visual_skill_agent.py \
 ### 微调已有本项目网络
 
 ```bash
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_run1/manifest.json \
   --pretrained runs/visual_g1_run1/best.pt --freeze-encoder \
   --output runs/visual_g1_finetune_run1 --device cuda --epochs 10
@@ -130,24 +130,24 @@ python scripts/visual_world.py train \
 
 ## 路线 B：已下载的开源操作数据用于离线训练
 
-本机原数据在 `data/raw/lerobot/unitree_g1_pack_camera/`，追踪清单为 `data/manifests/unitree_g1_pack_camera.json`。其实际任务是 mount camera，不应由文件夹名称推断为 G1_Stack_Block。
+本机原数据在 `data/raw/lerobot/unitree_g1_pack_camera/`，追踪清单为 `../world-model-training/data/manifests/unitree_g1_pack_camera.json`。其实际任务是 mount camera，不应由文件夹名称推断为 G1_Stack_Block。
 
 数据导入也使用 `wmal` 中的 PyArrow 和 PyAV/libdav1d。AV1 视频通过 PyAV 解码，并核对逐帧 PTS 与 parquet 时间戳，不静默截断错位帧，不需要另一个解码环境。
 
 ```bash
 conda activate wmal
 export PYTHONPATH="$PWD/src"
-python scripts/visual_world.py import-lerobot \
-  --source-manifest data/manifests/unitree_g1_pack_camera.json \
+python ../world-model-training/scripts/visual_world.py import-lerobot \
+  --source-manifest ../world-model-training/data/manifests/unitree_g1_pack_camera.json \
   --output data/processed/lerobot_visual_run1 \
   --action-schema unitree.g1.dex1.joint_target.v1 \
   --max-episodes 20 --max-frames 32 --image-size 64
 
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/lerobot_visual_run1/manifest.json \
   --output runs/lerobot_visual_run1 --device cuda --epochs 30
 
-python scripts/visual_world.py evaluate \
+python ../world-model-training/scripts/visual_world.py evaluate \
   --manifest data/processed/lerobot_visual_run1/manifest.json \
   --checkpoint runs/lerobot_visual_run1/best.pt \
   --output runs/lerobot_visual_run1/test_metrics.json --horizon 4
@@ -157,7 +157,7 @@ python scripts/visual_world.py evaluate \
 
 去掉 `--max-episodes` 使用全部 episode；`--max-frames` 控制每条导入前缀，正式评估应覆盖更丰富阶段，而不是只用开头静止片段。20×32 是数据/显存冒烟，不能作为模型泛化实验。16D Dex1 模型不能用于 `visual_skill_agent.py` 的 2D 固定底座增量接口，兼容检查会拒绝。
 
-若目标是**开源大模型微调**，继续采用 [UniFoLM 专用路线](15_unifolm_training_adaptation.md)，本轮没有下载/训练 UniFoLM 10GB 以上权重，也未验证其在本机 8GB 显存可运行。紧凑网络用于独立方法验证与工程调试，不能作为大模型微调已完成的替代说法。
+若目标是**开源大模型微调**，继续采用 [UniFoLM 专用路线](../../world-model-training/docs/15_unifolm_training_adaptation.md)，本轮没有下载/训练 UniFoLM 10GB 以上权重，也未验证其在本机 8GB 显存可运行。紧凑网络用于独立方法验证与工程调试，不能作为大模型微调已完成的替代说法。
 
 ## 输出与复现
 

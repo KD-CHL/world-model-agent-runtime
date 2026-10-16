@@ -23,11 +23,11 @@ Ubuntu + MuJoCo 世界模型机器人与高层 Agent 研究项目。
 
 新增可切换的 **categorical RSSM 世界模型**：观测后验/动作先验、离散随机状态、balanced KL/free nats、后验重构与先验多步训练；保留确定性网络作对照。Agent 支持真实反馈驱动的有序子目标、有限重观测预算及预测证据账本。只使用 `wmal`，不引入上游项目环境，不训练 actor–critic/controller。见 [RSSM 架构、训练/微调与持续仿真命令](docs/25_rssm_agent.md) 和 [实际验收](docs/architecture/rssm-agent-verification.md)。
 
-进一步新增 **固定真实历史条件的时序 RSSM**：训练、推理、校准共用 K=2 历史协议，Agent 校验逐动作真实执行反馈，并在中间步骤预测超界时触发重新观测。旧 K=0 模型/校准继续兼容；新模型不替换演示默认模型。模块边界、源码依据、完整启动命令与真实测试局限见 [时序世界模型工程指南](docs/27_temporal_world_model_engineering.md)，配置为 `configs/training/rssm_temporal_world.json`。
+进一步新增 **固定真实历史条件的时序 RSSM**：训练、推理、校准共用 K=2 历史协议，Agent 校验逐动作真实执行反馈，并在中间步骤预测超界时触发重新观测。旧 K=0 模型/校准继续兼容；新模型不替换演示默认模型。模块边界、源码依据、完整启动命令与真实测试局限见 [时序世界模型工程指南](docs/27_temporal_world_model_engineering.md)，配置为 `../world-model-training/configs/training/rssm_temporal_world.json`。
 
-研究主线：[预测可信度辅助机器人Agent规划与两条训练路线](docs/21_research_plan_prediction_reliability.md)；[数据集核查清单](docs/22_world_model_dataset_catalog.md)。固定技能和任务状态机，当前先验证状态规划网络的训练闭环；视觉动作条件模型保留为独立支线，两条路线均需独立消融。
+研究主线：[预测可信度辅助机器人Agent规划与两条训练路线](docs/21_research_plan_prediction_reliability.md)；[数据集核查清单](../world-model-training/docs/22_world_model_dataset_catalog.md)。固定技能和任务状态机，当前先验证状态规划网络的训练闭环；视觉动作条件模型保留为独立支线，两条路线均需独立消融。
 
-规划世界模型训练网络：[神经动力学集成的结构、采样、训练、续训和规划接入](docs/architecture/motion-network.md)。入口 `scripts/train_motion_network.py`，支持 `collect`、`train`、`evaluate`；G1 接入配置为 `configs/g1_neural.json`。
+规划世界模型训练网络：[神经动力学集成的结构、采样、训练、续训和规划接入](docs/architecture/motion-network.md)。入口 `../world-model-training/scripts/train_motion_network.py`，支持 `collect`、`train`、`evaluate`；G1 接入配置为 `configs/g1_neural.json`。
 
 Agent 架构优化：共享技能生命周期、G1 有预算的任务重规划、验证集残差阈值、G1 ROS2 会话与统一日志汇总，见 [设计与启动说明](docs/architecture/agent-runtime.md)。
 
@@ -38,7 +38,7 @@ Agent 架构优化：共享技能生命周期、G1 有预算的任务重规划�
 `stack_block` 当前提供显式标记的两指夹爪代理、真值隔离操作会话、固定技能/独立验证器接口，以及无世界模型基线运行器：
 
 ```bash
-python scripts/stack_block_baseline.py --output-dir runs/stack_block_baseline_<unique-name>
+python ../world-model-training/scripts/stack_block_baseline.py --output-dir runs/stack_block_baseline_<unique-name>
 ```
 
 阶段一已有无世界模型堆叠基线：jittered 开发 seeds 0–9 为 10/10；两个独立 seed 批次共 79/80（98.75%，Wilson 95% 区间约 93.3%–99.8%），seed 106 在放置阶段倾倒并由真值验证器判失败。该结果只适用于当前窄幅 jitter 初态；基线在放置判据稳定后立即终止，撤离技能尚未验收。运行器失败时以非零状态退出，并将失败 episode 保留在分母。夹爪是显式平行夹爪代理，不代表真实 Dex1 手部模型。
@@ -46,8 +46,8 @@ python scripts/stack_block_baseline.py --output-dir runs/stack_block_baseline_<u
 同步 RGB / 状态 / 动作 / 物体真值采集及视觉模型训练入口：
 
 ```bash
-python scripts/collect_stack_block_visual.py --episodes 40 --seed-start 3000 --image-size 64 --output-dir runs/stack_block_visual_<unique-name>
-python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_<unique-name>/manifest.json --output runs/stack_block_model_<unique-name> --config configs/training/stack_block_visual_v2.json
+python ../world-model-training/scripts/collect_stack_block_visual.py --episodes 40 --seed-start 3000 --image-size 64 --output-dir runs/stack_block_visual_<unique-name>
+python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_<unique-name>/manifest.json --output runs/stack_block_model_<unique-name> --config ../world-model-training/configs/training/stack_block_visual_v2.json
 ```
 
 采集器按 episode 生成 train / validation / calibration / test split；`object_truth` 是监督/评估标签，不进入模型输入。v8 的独立 test 整体对象误差优于 persistence，但堆叠目标 `block_0` 的位置/姿态误差更差，事件 Brier 也落后；续训的 v9 32 步候选在 validation 上仍明显输给 persistence 的 `block_0` 位姿预测，因此暂不进入世界模型控制实验。完整对照、划分和哈希见 [堆叠任务世界模型实验进展](docs/20_stack_block_experiment_progress.md)。
@@ -65,9 +65,9 @@ python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_<uni
 ```bash
 conda activate wmal
 export PYTHONPATH="$PWD/src"
-python scripts/g1_research.py collect --episodes 12 --steps 30
-python scripts/g1_research.py train
-python scripts/g1_research.py evaluate --feedback --steps 100
+python ../world-model-training/scripts/g1_research.py collect --episodes 12 --steps 30
+python ../world-model-training/scripts/g1_research.py train
+python ../world-model-training/scripts/g1_research.py evaluate --feedback --steps 100
 python scripts/g1_agent_sim.py --config configs/g1_research.json
 ```
 
@@ -82,17 +82,17 @@ python scripts/g1_agent_sim.py --config configs/g1_research.json
 2. [研究问题与路线](docs/02_research_and_route.md)
 3. [架构与时序](docs/03_architecture.md)
 4. [接口和调度](docs/04_contracts_and_runtime.md)
-5. [训练/评估伪代码](docs/05_training_pseudocode.md)
+5. [训练/评估伪代码](../world-model-training/docs/05_training_pseudocode.md)
 6. [实验与数据](docs/06_experiments_and_data.md)
 7. [实施计划与预算](docs/07_delivery_plan.md)
 8. [完整目录树](docs/08_directory_tree.md)
 9. [Agent、ROS 2 设计与启动指南](docs/09_agent_ros2_design.md)
 10. [世界模型规划的数据闭环与运行入口](docs/11_planning_world_model_pipeline.md)
 11. [可选视觉动作服务调用设计](docs/10_world_model_call_design.md)
-12. [视觉动作模型训练与第二数据源可行性](docs/12_secondary_data_feasibility.md)
-13. [论文实验数据清单与仿真输出](docs/13_paper_data_pipeline.md)
+12. [视觉动作模型训练与第二数据源可行性](../world-model-training/docs/12_secondary_data_feasibility.md)
+13. [论文实验数据清单与仿真输出](../world-model-training/docs/13_paper_data_pipeline.md)
 14. [规划层世界模型开源项目筛选](docs/14_open_source_planning_references.md)
-15. [基于 UnifoLM 的机器人世界模型训练与微调路线](docs/15_unifolm_training_adaptation.md)
+15. [基于 UnifoLM 的机器人世界模型训练与微调路线](../world-model-training/docs/15_unifolm_training_adaptation.md)
 16. [G1 本地浮动底座步行测试](docs/16_g1_local_walking.md)
 17. [G1/UnifoLM 研究功能实施规格](docs/superpowers/specs/2026-09-23-g1-unifolm-research-track-design.md)
 18. [Agent 实验观测台：实时画面、预测反馈、事件与历史比较](docs/24_agent_monitor.md)
@@ -100,7 +100,7 @@ python scripts/g1_agent_sim.py --config configs/g1_research.json
 
 运行主线包含关节状态规划与 G1 导航规划。G1 目前支持 MuJoCo 采集 → 多步潜在动力学集成训练 → 候选轨迹批量预测 → Agent 规划及恢复 → 直接或 ROS 2 会话执行 → 观测残差和训练数据导出。G1 训练与直接 MuJoCo 闭环已做本地冒烟验证；ROS 2 实际中间件及其他机器人训练需分别验证。
 
-世界模型训练升级见 [网络、源码参考与闭环接口](docs/architecture/planning-network.md) 和 [本轮验收报告](docs/architecture/planning-network-verification.md)。训练入口为 `scripts/train_motion_network.py`，新配置为 `configs/training/planning_network.json`；旧物理网络和检查点继续可用。参考机制采用独立功能命名，证据表给出固定 GitHub 源码版本。
+世界模型训练升级见 [网络、源码参考与闭环接口](docs/architecture/planning-network.md) 和 [本轮验收报告](docs/architecture/planning-network-verification.md)。训练入口为 `../world-model-training/scripts/train_motion_network.py`，新配置为 `../world-model-training/configs/training/planning_network.json`；旧物理网络和检查点继续可用。参考机制采用独立功能命名，证据表给出固定 GitHub 源码版本。
 
 ## 当前可以执行
 
@@ -126,7 +126,7 @@ PYTHONPATH=src python scripts/agent_monitor.py --runs-root runs --port 8765
 数据和权重由 gitignore 排除，所以远程仓库只看得到来源清单，下载代码不会自动获得这些大文件。
 完整数据来源、采集/导入及训练命令见 [视觉训练指南](docs/23_visual_world_training_and_agent.md)。
 
-`scripts/visual_world.py train`（含 `--pretrained` 微调）和 `scripts/train_motion_network.py train` 默认显示轮次、训练/验证批次、集成成员、损失、耗时及 ETA。增加 `--no-progress` 可关闭提示；进度写 stderr，不改变 stdout 的 JSON、训练算法或 checkpoint 格式。所有命令只使用 `wmal`。
+`../world-model-training/scripts/visual_world.py train`（含 `--pretrained` 微调）和 `../world-model-training/scripts/train_motion_network.py train` 默认显示轮次、训练/验证批次、集成成员、损失、耗时及 ETA。增加 `--no-progress` 可关闭提示；进度写 stderr，不改变 stdout 的 JSON、训练算法或 checkpoint 格式。所有命令只使用 `wmal`。
 
 ## Conda 环境安装与启动
 
@@ -187,8 +187,8 @@ PYTHONPATH=src python scripts/simulate.py --config configs/robots/interface_prob
 PYTHONPATH=src python scripts/simulate.py --config configs/robots/g1_fixed_base.json --steps 1000
 PYTHONPATH=src python scripts/simulate.py --config configs/robots/g1_fixed_base.json --viewer
 PYTHONPATH=src python scripts/walk_g1.py --steps 10
-PYTHONPATH=src python scripts/collect.py --config configs/robots/interface_probe.json
-PYTHONPATH=src python scripts/train.py
+PYTHONPATH=src python ../world-model-training/scripts/collect.py --config configs/robots/interface_probe.json
+PYTHONPATH=src python ../world-model-training/scripts/train.py
 ```
 
 交互窗口中，按 `N` / `P` 选择下一个/上一个关节，按 `[` / `]` 将当前关节目标减少/增加 `0.1 rad`，按 `0` 将目标设为当前关节位置。目标会按配置的关节速度上限平滑执行；默认相机可用鼠标旋转，若需锁定相机可加 `--camera pack_camera`。
@@ -207,7 +207,7 @@ Agent 请求 HTTP API，将受限目标交给 ROS 2 世界模型规划服务，�
 
 仿真采样、训练和评估命令见[规划主线](docs/11_planning_world_model_pipeline.md)。另有独立的视觉动作服务客户端，用于后续策略对照；图像采集和机器人动作映射尚待具体资产接入，见[动作服务设计](docs/10_world_model_call_design.md)。
 
-G1 数据准备、WMA decision/joint 微调、策略服务调用和离线视频预测评估入口见[UnifoLM 训练与接入指南](docs/15_unifolm_training_adaptation.md)。固定底座关节测试仍使用 [固定底座配置](configs/robots/g1_fixed_base.json)。浮动底座行走使用 Unitree 预训练策略，运行 `PYTHONPATH=src python scripts/walk_g1.py --steps 10`；命令只在完成 10 次交替足部触地且通过姿态/高度保护后报告成功，并输出前进位移等指标。详见 [G1 本地步行指南](docs/16_g1_local_walking.md)。这与 UnifoLM 数据集动作映射和 WMA 策略微调是独立路径。原始数据、微调权重和训练输出建议保存在仓库外的数据盘。
+G1 数据准备、WMA decision/joint 微调、策略服务调用和离线视频预测评估入口见[UnifoLM 训练与接入指南](../world-model-training/docs/15_unifolm_training_adaptation.md)。固定底座关节测试仍使用 [固定底座配置](configs/robots/g1_fixed_base.json)。浮动底座行走使用 Unitree 预训练策略，运行 `PYTHONPATH=src python scripts/walk_g1.py --steps 10`；命令只在完成 10 次交替足部触地且通过姿态/高度保护后报告成功，并输出前进位移等指标。详见 [G1 本地步行指南](docs/16_g1_local_walking.md)。这与 UnifoLM 数据集动作映射和 WMA 策略微调是独立路径。原始数据、微调权重和训练输出建议保存在仓库外的数据盘。
 
 需要保持 MuJoCo 窗口运行、由世界模型预测和 Agent 连续重规划时，使用 [G1 世界模型闭环指南](docs/17_g1_world_model_agent_loop.md) 与 `PYTHONPATH=src python scripts/g1_agent_sim.py --config configs/experiments/g1_closed_loop.example.json`。该实验入口要求显式配置兼容的 G1 浮动底座状态预测器；Unitree ONNX 仅作为低层行走控制器。完成单个目标不会关闭会话，可继续输入后续目标；本入口不负责训练世界模型。
 

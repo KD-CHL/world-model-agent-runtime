@@ -147,4 +147,4 @@ Dual用于管线冒烟，论文微调优先Base；对于Base也不能保证所�
 
 先追求可解释的机制和负结果分析。若只能证明“误差降低”却没有同预算决策收益，则论文应收敛为预测/校准研究，不能宣称改善Agent规划。
 
-数据清单见 [22_world_model_dataset_catalog.md](22_world_model_dataset_catalog.md)。当前研究方向以本方案为准；旧导航与API模块保留为工程基线，不能代替上述验证。
+数据清单见 [22_world_model_dataset_catalog.md](../../world-model-training/docs/22_world_model_dataset_catalog.md)。当前研究方向以本方案为准；旧导航与API模块保留为工程基线，不能代替上述验证。

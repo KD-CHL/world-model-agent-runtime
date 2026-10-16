@@ -32,11 +32,11 @@ flowchart LR
   T --> P
 ```
 
-G1/UnifoLM 是一条并行研究路径：LeRobot episode 数据 → WMA 上游视频世界模型/决策微调 → 外部动作服务 → 同步 RGB/state 策略闭环。它不替代上图的数值状态模型与候选 rollout，也不会把视频预测误当作 `predicted_state`。数据 manifest、训练启动与外部服务接入见 [UnifoLM 指南](15_unifolm_training_adaptation.md)。
+G1/UnifoLM 是一条并行研究路径：LeRobot episode 数据 → WMA 上游视频世界模型/决策微调 → 外部动作服务 → 同步 RGB/state 策略闭环。它不替代上图的数值状态模型与候选 rollout，也不会把视频预测误当作 `predicted_state`。数据 manifest、训练启动与外部服务接入见 [UnifoLM 指南](../../world-model-training/docs/15_unifolm_training_adaptation.md)。
 
 Agent 对模型报告只消费结构化预测；它不直接控制仿真器。执行端仍验证机器人 ID、episode、step、动作模式、持续时间、关节限位与速度限制。每次命令执行后，Agent 将预测的第一步状态与新观测比较，记录每关节残差和 RMSE，再发起下一次计划请求。ensemble spread 被记录为成员差异，尚未校准前不解释为任务失败概率。
 
-训练样本为 `(episode_id, step_id, sim_time_s, before_joints, commanded_joint_target, actual_duration_s, after_joints)`。所有相邻帧随 episode 进入同一数据集合。状态基线由 `scripts/train.py` 训练；可选非线性模型由 `scripts/train_neural_dynamics.py` 训练，仅用 train 拟合、validation 选择、test 最终评估。规划器对每个成员滚动模拟候选序列，只发送第一段；`PredictionReport.predicted_state` 对应执行后第一步，`predicted_terminal_state` 对应规划终点。
+训练样本为 `(episode_id, step_id, sim_time_s, before_joints, commanded_joint_target, actual_duration_s, after_joints)`。所有相邻帧随 episode 进入同一数据集合。状态基线由 `../world-model-training/scripts/train.py` 训练；可选非线性模型由 `../world-model-training/scripts/train_neural_dynamics.py` 训练，仅用 train 拟合、validation 选择、test 最终评估。规划器对每个成员滚动模拟候选序列，只发送第一段；`PredictionReport.predicted_state` 对应执行后第一步，`predicted_terminal_state` 对应规划终点。
 
 ## 采样、训练与评估命令
 
@@ -44,10 +44,10 @@ Agent 对模型报告只消费结构化预测；它不直接控制仿真器。�
 
 ```bash
 python -m pip install -e '.[simulation,learning]'
-python scripts/collect.py --config configs/robots/interface_probe.json --output runs/probe/transitions.jsonl --episodes 10 --steps-per-episode 8 --seed 4
-python scripts/train.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.json --seed 4
-python scripts/train_neural_dynamics.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.pt --members 5 --epochs 100 --seed 4
-python scripts/evaluate.py --config configs/robots/interface_probe.json --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.pt --output runs/probe/evaluation.jsonl --episodes 10 --seed 20
+python ../world-model-training/scripts/collect.py --config configs/robots/interface_probe.json --output runs/probe/transitions.jsonl --episodes 10 --steps-per-episode 8 --seed 4
+python ../world-model-training/scripts/train.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.json --seed 4
+python ../world-model-training/scripts/train_neural_dynamics.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.pt --members 5 --epochs 100 --seed 4
+python ../world-model-training/scripts/evaluate.py --config configs/robots/interface_probe.json --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.pt --output runs/probe/evaluation.jsonl --episodes 10 --seed 20
 ```
 
 把已训练模型接到 ROS 2 规划服务：

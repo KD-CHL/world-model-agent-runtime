@@ -10,13 +10,13 @@ world-model-agent-lab/
   configs/base.json
   configs/experiments.json
   configs/skills.json
-  data/README.md
+  ../world-model-training/data/README.md
   docs/00_request.md
   docs/01_literature.md
   docs/02_research_and_route.md
   docs/03_architecture.md
   docs/04_contracts_and_runtime.md
-  docs/05_training_pseudocode.md
+  ../world-model-training/docs/05_training_pseudocode.md
   docs/06_experiments_and_data.md
   docs/07_delivery_plan.md
   docs/literature_inventory.json
@@ -26,14 +26,14 @@ world-model-agent-lab/
   robots/assets/README.md
   runs/README.md
   scripts/check_scaffold.py
-  scripts/collect.py
-  scripts/evaluate.py
+  ../world-model-training/scripts/collect.py
+  ../world-model-training/scripts/evaluate.py
   scripts/export_results.py
   scripts/run_agent.py
   scripts/simulate.py
-  scripts/train.py
-  scripts/train_skill_outcome.py
-  src/wmal/__init__.py
+  ../world-model-training/scripts/train.py
+  ../world-model-training/scripts/train_skill_outcome.py
+  # wmal is an implicit PEP 420 namespace (no __init__.py)
   src/wmal/agents/README.md
   src/wmal/agents/__init__.py
   src/wmal/agents/feedback.py
@@ -91,11 +91,11 @@ world-model-agent-lab/
   src/wmal/skills/executor.py
   src/wmal/skills/predicates.py
   src/wmal/skills/registry.py
-  src/wmal/training/README.md
-  src/wmal/training/__init__.py
-  src/wmal/training/checkpoint.py
-  src/wmal/training/collector.py
-  src/wmal/training/trainer.py
+  ../world-model-training/src/wmal/training/README.md
+  ../world-model-training/src/wmal/training/__init__.py
+  ../world-model-training/src/wmal/training/checkpoint.py
+  ../world-model-training/src/wmal/training/collector.py
+  ../world-model-training/src/wmal/training/trainer.py
   tests/README.md
   docs/08_directory_tree.md
   docs/09_agent_ros2_design.md

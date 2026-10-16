@@ -25,7 +25,7 @@ MuJoCo + 已训练低层行走策略 → 状态/速度指令/下一状态 → ep
 - `locomotion/planner.py`：采样动作序列，逐步模型展开；过滤预测低高度或大倾角，综合终点误差、控制代价和不确定性，执行首段。
 - `locomotion/feedback.py`：对位置预测残差做指数平滑，误差超过阈值时收缩下一轮速度范围，误差下降后恢复。它不在线更新模型权重。
 - `locomotion/agent.py`：任务终止、状态时序检查、预测与反馈日志。会话生命周期由调用者管理。
-- `scripts/g1_research.py`：真实仿真采集、离线训练、已有检查点适配、单目标评估。
+- `../world-model-training/scripts/g1_research.py`：真实仿真采集、离线训练、已有检查点适配、单目标评估。
 - `scripts/g1_agent_sim.py`：常驻交互窗口，可连续输入多个目标。
 
 实现顺序：复用状态/动作协议 → 可训练模型与持久化 → 接入反馈 → 采集训练评估命令 → 合成数据单测与真实仿真验收。
@@ -39,14 +39,14 @@ conda activate wmal
 export PYTHONPATH="$PWD/src"
 
 # 采集；每个 episode 重新初始化机器人
-python scripts/g1_research.py collect --episodes 12 --steps 30 --seed 0
+python ../world-model-training/scripts/g1_research.py collect --episodes 12 --steps 30 --seed 0
 
 # 训练并输出验证/测试指标
-python scripts/g1_research.py train --seed 0
+python ../world-model-training/scripts/g1_research.py train --seed 0
 
 # 在同一目标上分别运行无反馈和有反馈版本
-python scripts/g1_research.py evaluate --steps 100 --seed 0
-python scripts/g1_research.py evaluate --steps 100 --seed 0 --feedback
+python ../world-model-training/scripts/g1_research.py evaluate --steps 100 --seed 0
+python ../world-model-training/scripts/g1_research.py evaluate --steps 100 --seed 0 --feedback
 
 # 打开常驻交互窗口；目标完成后可继续输入新目标
 python scripts/g1_agent_sim.py --config configs/g1_research.json
@@ -59,7 +59,7 @@ python scripts/g1_agent_sim.py --config configs/g1_research.json
 适配另一个环境采集的数据：
 
 ```bash
-python scripts/g1_research.py train \
+python ../world-model-training/scripts/g1_research.py train \
   --dataset data/g1_locomotion/new_transitions.json \
   --prior runs/g1_research/model.json \
   --checkpoint runs/g1_research/adapted.json

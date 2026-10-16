@@ -45,4 +45,4 @@
 本项目仍统一负责模型版本、预测报告、安全限制、执行回执和重规划。
 
 Unitree UnifoLM-WMA 与 UnifoLM-VLA 的数据准备、微调阶段和适配边界见
-[训练与微调路线](15_unifolm_training_adaptation.md)。
+[训练与微调路线](../../world-model-training/docs/15_unifolm_training_adaptation.md)。
