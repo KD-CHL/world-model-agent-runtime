@@ -1,5 +1,17 @@
 # 架构与时序
 
+## 运行与训练项目边界
+
+本仓库发布运行包 `world-model-agent-lab`：模型架构、推理/保存/加载、数据契约、独立校准、在线动作序列搜索、Agent、仿真/机器人与监控均归此项目。`../world-model-training` 发布独立的 `wmal.training`，拥有模型拟合、优化器、训练数据准备和训练命令；运行包不导入训练包。两个发行包通过隐式 `wmal` 命名空间共享接口。
+
+运行依赖安装 `.[model-runtime]`；MuJoCo、ONNX 行走和监控分别通过 `simulation`、`walking`、`monitor` 选择。训练项目先安装本运行包，再按自己的 README 安装训练 extra。
+
+模型提供者由运行层选择：G1 配置使用 `world_model.factory` 和 `world_model.config`；具身 Agent 通过 `--inference-url` 显式选择 HTTP 传输，省略时为本地推理。训练项目不会替运行层选择提供者。模型预测、数据与校准 schema 保持兼容。
+
+以下时序图保留原始关节规划设计背景；当前入口与安装方式以 [运行 README](../README.md) 为准。
+
+## 关节规划设计背景
+
 ```mermaid
 flowchart TD
  T[用户任务] --> A[API Agent]
@@ -26,7 +38,7 @@ flowchart TD
 | skills | SkillSpec→ActionCommand | 技能库预留；尚未接入当前 joint_goal 路径 |
 | envs/robots | ActionCommand→Observation | 唯一状态修改入口；坐标与控制模式适配 |
 | communication | 消息→确认/错误 | 版本、时序和 episode 隔离 |
-| datasets/replay/training | 仿真轨迹→检查点 | 数据来源及训练集边界 |
+| datasets | 仿真轨迹→共享序列契约 | 数据格式及来源边界；拟合在独立训练项目 |
 | evaluation/logging/analysis | 冻结快照→指标及图表 | 独立检测器与可追溯证据 |
 
 ```mermaid

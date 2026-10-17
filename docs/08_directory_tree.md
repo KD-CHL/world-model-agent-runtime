@@ -1,6 +1,6 @@
 # 项目文件树
 
-所有Python算法模块为明确标注的预留文件；只有check_scaffold执行检查。
+运行仓库保留模型、Agent、机器人、仿真、校准和监控。下列带 `../world-model-training/` 的路径属于相邻的独立训练仓库；运行包不导入训练包。
 
 ```text
 world-model-agent-lab/

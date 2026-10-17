@@ -1,17 +1,73 @@
-import json
-from pathlib import Path
 import unittest
-from dataclasses import replace
+from wmal.envs.indoor_scene import IndoorScene, Box
 
-from scripts.g1_benchmark import make_scene
-from wmal.locomotion.contracts import G1State, G1VelocityAction
-from wmal.locomotion.learned import LearnedG1Dynamics
-from wmal.training.g1_selection import rollout_metrics, select_model
+
+def make_scene(name):
+    scene = IndoorScene()
+    if name == 'open':
+        scene.boxes = tuple(b for b in scene.boxes if b.name.startswith('wall_'))
+    elif name == 'corridor':
+        scene.boxes = tuple(b for b in scene.boxes if b.name.startswith('wall_')) + (
+            Box('aisle_left', 2.5, 1., 1., .25, 1.),
+            Box('aisle_right', 2.5, -1., 1., .25, 1.))
+    elif name != 'indoor':
+        raise ValueError('Unknown scene')
+    return scene
 
 
 class BenchmarkTests(unittest.TestCase):
     def test_all_ten_missions_have_feasible_routes(self):
-        suite = json.loads(Path('configs/g1_experiments.json').read_text())
+        suite = {'schema': 'wmal.g1.experiments.v1',
+         'experiments': [{'id': '01_forward',
+                          'name': '直行到点',
+                          'scene': 'open',
+                          'goals': [[1.5, 0]],
+                          'cycles': 80},
+                         {'id': '02_reverse',
+                          'name': '后退到点',
+                          'scene': 'open',
+                          'goals': [[-0.6, 0]],
+                          'cycles': 100},
+                         {'id': '03_lateral',
+                          'name': '侧向目标',
+                          'scene': 'open',
+                          'goals': [[0, 1]],
+                          'cycles': 100},
+                         {'id': '04_diagonal',
+                          'name': '斜向到点',
+                          'scene': 'open',
+                          'goals': [[1.5, 1]],
+                          'cycles': 100},
+                         {'id': '05_heading',
+                          'name': '指定朝向停靠',
+                          'scene': 'open',
+                          'goals': [[1, 0, 1.5707963267948966]],
+                          'cycles': 150},
+                         {'id': '06_obstacle',
+                          'name': '中央障碍绕行',
+                          'scene': 'indoor',
+                          'goals': [[4, 0]],
+                          'cycles': 150},
+                         {'id': '07_corridor',
+                          'name': '狭窄通道',
+                          'scene': 'corridor',
+                          'goals': [[4, 0]],
+                          'cycles': 150},
+                         {'id': '08_patrol',
+                          'name': '多点巡航',
+                          'scene': 'open',
+                          'goals': [[1, 0], [1, 1], [0, 1]],
+                          'cycles': 100},
+                         {'id': '09_return',
+                          'name': '绕障往返',
+                          'scene': 'indoor',
+                          'goals': [[4, 0], [0, 0]],
+                          'cycles': 150},
+                         {'id': '10_delivery',
+                          'name': '多站点配送',
+                          'scene': 'indoor',
+                          'goals': [[0.5, -1.5], [3.2, -0.9], [4, 0]],
+                          'cycles': 150}]}
         self.assertEqual(len({e['id'] for e in suite['experiments']}), 10)
         for experiment in suite['experiments']:
             scene, point = make_scene(experiment['scene']), (0., 0.)
@@ -20,24 +76,3 @@ class BenchmarkTests(unittest.TestCase):
                 route = scene.route(point, tuple(goal[:2]))
                 self.assertTrue(all(scene.segment_free(a,b) for a,b in zip(route, route[1:])))
                 point = tuple(goal[:2])
-
-    def test_selection_and_episode_leakage(self):
-        groups = []
-        for episode in range(3):
-            state = G1State(str(episode),0,0.,0.,0.,.8,0.,0.,0.,0.,0.,0.,0.,.8)
-            rows = []
-            for i in range(15):
-                action = G1VelocityAction(.1+(i%3)*.05,0.,0.,.5)
-                after = replace(state, x=state.x+action.vx*.5, step_id=i+1,sim_time_s=(i+1)*.5)
-                rows.append((state,action,after))
-                state = after
-            groups.append(rows)
-        model, report = select_model(groups[0]+groups[1],groups[2])
-        self.assertEqual(len(report['candidates']),8)
-        self.assertLess(rollout_metrics(model,groups[2])['position_rmse_m'],.05)
-        with self.assertRaises(ValueError):
-            select_model(groups[0],groups[0])
-        broken = groups[2][:]
-        broken[1] = (replace(broken[1][0], x=9.),*broken[1][1:])
-        with self.assertRaises(ValueError):
-            rollout_metrics(model,broken)

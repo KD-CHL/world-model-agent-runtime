@@ -23,13 +23,13 @@
 ```bash
 conda activate wmal
 export PYTHONPATH=src
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_world.json --output runs/rssm_g1_smoke_20261002 \
+  --config ../world-model-training/configs/training/rssm_world.json --output runs/rssm_g1_smoke_20261002 \
   --epochs 12 --device cpu
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_world.json --output runs/rssm_g1_finetuned_smoke_20261002 \
+  --config ../world-model-training/configs/training/rssm_world.json --output runs/rssm_g1_finetuned_smoke_20261002 \
   --epochs 2 --pretrained runs/rssm_g1_smoke_20261002/best.pt --freeze-encoder --device cpu
 ```
 
@@ -42,12 +42,12 @@ python scripts/visual_world.py train \
 ## 独立校准与测试
 
 ```bash
-python scripts/visual_world.py calibrate \
+python ../world-model-training/scripts/visual_world.py calibrate \
   --manifest data/processed/visual_g1_20260930/manifest.json \
   --checkpoint runs/rssm_g1_finetuned_smoke_20261002/best.pt \
   --output runs/rssm_g1_finetuned_smoke_20261002/calibration.json \
   --horizon 4 --alpha .2 --device cpu
-python scripts/visual_world.py evaluate \
+python ../world-model-training/scripts/visual_world.py evaluate \
   --manifest data/processed/visual_g1_20260930/manifest.json \
   --checkpoint runs/rssm_g1_finetuned_smoke_20261002/best.pt \
   --calibration runs/rssm_g1_finetuned_smoke_20261002/calibration.json \

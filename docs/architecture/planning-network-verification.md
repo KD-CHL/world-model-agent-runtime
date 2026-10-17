@@ -18,7 +18,7 @@
 
 - `runs/motion_network_smoke/transitions.json`，128 条，8 个回合；4 train、2 validation、2 test；动作保持时间 0.5 s。
 - 数据 SHA-256：`6c2e0ca7264513c564c6cd174ca5ac68abe1a4e9044e491d6e663b3f617a4eb3`。
-- 新配置 `configs/training/planning_network_smoke.json`：3 成员，hidden=[32,32]，三步训练，40 epochs，seed=7，CPU 单线程。
+- 新配置 `../world-model-training/configs/training/planning_network_smoke.json`：3 成员，hidden=[32,32]，三步训练，40 epochs，seed=7，CPU 单线程。
 - v2 模型版本 `motion-8c5eb24aebbe6661`；总参数 28,365；训练循环约 0.65 s，未计解释器启动/加载和采集时间。
 - 验证复合损失从首轮 1.19894 降至最佳 0.74377，最佳 epoch=39。各架构损失项不同，不能直接用复合损失数值比较优劣。
 - 原 v1 模型版本 `motion-b06413e7d1cefe9c`；总参数 4,818，40 epochs，seed=7，同一数据划分；训练循环约 0.31 s。参数量与计算时间不相同，当前并非等计算比较。

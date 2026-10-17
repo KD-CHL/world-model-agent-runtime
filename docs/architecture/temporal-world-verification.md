@@ -15,7 +15,7 @@
 
 真实数据来自本机既有 MuJoCo 仿真 episode，而不是人工捏造模型输出。
 40 个 episode、640 次动作转移，train/validation/calibration/test = 24/4/8/4。
-训练配置 `configs/training/rssm_temporal_world.json`（K=2、H=4），本轮验收临时覆盖轮数。
+训练配置 `../world-model-training/configs/training/rssm_temporal_world.json`（K=2、H=4），本轮验收临时覆盖轮数。
 
 | 阶段 | 本机工件（被 Git 排除） | 结果 |
 | --- | --- | --- |

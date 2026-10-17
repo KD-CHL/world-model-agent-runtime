@@ -90,17 +90,6 @@ class VisualWorkcellTests(unittest.TestCase):
                 session.execute_actions(np.ones((1,2)),episode_id=after.episode_id,step_id=1)
             self.assertEqual(session.observe().step_id,1)
 
-    def test_collection_is_four_way_disjoint_and_opens_real_camera_windows(self):
-        from wmal.training.visual_collector import collect_visual_workcell
-        from wmal.datasets.visual_sequences import VisualDataset
-        with tempfile.TemporaryDirectory() as tmp:
-            path=collect_visual_workcell(Path(tmp)/'data',episodes=20,steps=3,image_size=32)
-            dataset=VisualDataset(path,'train',horizon=2)
-            self.assertEqual(dataset[0]['rgb'].shape,(3,3,32,32))
-            self.assertGreater(float(dataset[0]['rgb'].std()),.01)
-            self.assertEqual(set(r['split'] for r in dataset.manifest['episodes']),
-                             {'train','validation','calibration','test'})
-
 
 if __name__=='__main__':
     unittest.main()

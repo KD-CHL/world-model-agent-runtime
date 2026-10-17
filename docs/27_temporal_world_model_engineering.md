@@ -91,7 +91,8 @@ KL 分开停止梯度并使用 free nats。历史是 burn-in，不是监督 targ
 
 ```bash
 conda activate wmal
-python -m pip install -e '.[visual-world]'
+python -m pip install -e '.[model-runtime,simulation]'
+python -m pip install -e '../world-model-training[visual-world]'
 export MUJOCO_GL=egl
 
 # 新采集时执行；已有同名目录请换一个新名字，不覆盖旧数据。
@@ -101,12 +102,12 @@ wmal-visual-world collect --output data/processed/g1_temporal_new \
 # 下面使用本机已有数据；换数据时保持所有命令中的 manifest 一致。
 wmal-visual-world train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_temporal_world.json \
+  --config ../world-model-training/configs/training/rssm_temporal_world.json \
   --output runs/rssm_temporal_train --device cuda
 
 wmal-visual-world train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_temporal_world.json \
+  --config ../world-model-training/configs/training/rssm_temporal_world.json \
   --pretrained runs/rssm_temporal_train/best.pt --freeze-encoder \
   --output runs/rssm_temporal_finetune --device cuda --epochs 10
 

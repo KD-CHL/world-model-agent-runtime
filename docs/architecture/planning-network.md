@@ -1,5 +1,7 @@
 # 规划世界模型训练与 Agent—机器人闭环
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 本次交付包含可训练的状态潜在动力学网络、批量多步预测、规划证据及执行数据回流。文件按功能命名，代码独立编写；参考机制与来源在下面逐项列出。工程实现独立不等于算法新颖性已成立，也不能通过更改名称证明原创性。
 
 ## 1. GitHub 源码证据与路线选择
@@ -105,13 +107,13 @@ v2 包含状态编码器 `e(s)`、残差潜在转移 `f(z,a)`、物理预测头 
 
 ```bash
 # 采集真实 MuJoCo 交互；按整回合分 train/validation/test。
-PYTHONPATH=src python scripts/train_motion_network.py collect --output runs/planning_network/transitions.json
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py collect --output runs/planning_network/transitions.json
 # 主线训练；smoke 配置仅用于管线验收。
-PYTHONPATH=src python scripts/train_motion_network.py train --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --config configs/training/planning_network.json
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py train --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --config ../world-model-training/configs/training/planning_network.json
 # 恢复：总 epochs 包含已完成 epochs。
-PYTHONPATH=src python scripts/train_motion_network.py train --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --config configs/training/planning_network.json --resume runs/planning_network/model.latest.pt --epochs 150
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py train --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --config ../world-model-training/configs/training/planning_network.json --resume runs/planning_network/model.latest.pt --epochs 150
 # 冻结后独立评估和验证残差校准。
-PYTHONPATH=src python scripts/train_motion_network.py evaluate --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --output runs/planning_network/evaluation.json
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py evaluate --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --output runs/planning_network/evaluation.json
 PYTHONPATH=src python scripts/calibrate_residuals.py --dataset runs/planning_network/transitions.json --checkpoint runs/planning_network/model.pt --factory wmal.models.motion_network:load --output runs/planning_network/calibration.json
 # 世界模型与 MuJoCo 的闭环；API Agent 入口使用现有环境变量读取凭据。
 PYTHONPATH=src python scripts/g1_agent_sim.py --config configs/g1_planning_network.json --headless --goal '0.6 0'
@@ -131,7 +133,7 @@ ROS 2 入口需要另起会话服务器，见 [现有 ROS 2 会话指南](agent-
 把映射保存成 split-map.json，然后：
 
 ```bash
-PYTHONPATH=src python scripts/train_motion_network.py export-execution --logs runs/planning_network/agent.jsonl --split-map split-map.json --source mujoco_interaction --output runs/planning_network/executed_transitions.json
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py export-execution --logs runs/planning_network/agent.jsonl --split-map split-map.json --source mujoco_interaction --output runs/planning_network/executed_transitions.json
 ```
 
 一次回合的全部技能与恢复动作必须归同一集合；固定测试的动作不能进入后续训练或校准。导出数据保留行为模型版本、任务标识、日志 SHA 和失败事件；只导出一个训练回合不满足训练入口要求的三个集合。相邻帧从不随机跨集合。当前尚未实现自动聚合多批数据或在线适应。

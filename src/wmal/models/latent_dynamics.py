@@ -43,31 +43,6 @@ class JointDynamics:
             raise IndexError('Unknown ensemble member')
         return self.members(state, targets, duration_s)[index]
 
-    @classmethod
-    def fit(cls, records, joints, *, members=5, ridge=1e-3, seed=0, version='joint-dynamics-v1'):
-        if members < 1 or ridge <= 0 or not records:
-            raise ValueError('Invalid training data or parameters')
-        order = tuple(joints)
-        provisional = cls(order, np.zeros((1, 2 + 2 * len(order), len(order))), version)
-        features, deltas = [], []
-        for row in records:
-            before, after, target = row['before'], row['after'], row['target']
-            if set(after) != set(order):
-                raise ValueError('Next observation mismatch')
-            features.append(provisional._features(before, target, row['duration_s']))
-            delta = np.asarray([after[j] - before[j] for j in order], dtype=float)
-            if not np.isfinite(delta).all():
-                raise ValueError('Nonfinite training target')
-            deltas.append(delta)
-        x, y = np.asarray(features), np.asarray(deltas)
-        generator, coefficients = np.random.default_rng(seed), []
-        for _ in range(members):
-            sample = generator.integers(0, len(x), len(x)) if members > 1 else np.arange(len(x))
-            xs, ys = x[sample], y[sample]
-            penalty = np.eye(x.shape[1]) * ridge
-            penalty[0, 0] = 0
-            coefficients.append(np.linalg.solve(xs.T @ xs + penalty, xs.T @ ys))
-        return cls(order, coefficients, version)
 
     def save(self, path):
         destination = Path(path)

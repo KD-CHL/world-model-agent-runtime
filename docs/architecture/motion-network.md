@@ -32,11 +32,11 @@
 |---|---|
 | 状态/动作序列与回合划分检查 | `src/wmal/datasets/motion_sequences.py` |
 | 网络、可微积分、集成推理、原子权重保存 | `src/wmal/models/motion_network.py` |
-| 多步训练、验证选择、断点续训、独立评估 | `src/wmal/training/motion_trainer.py` |
-| MuJoCo 采样、失败记录、数据来源清单 | `src/wmal/training/motion_collector.py` |
-| collect/train/evaluate 命令 | `scripts/train_motion_network.py` |
-| 默认网络训练配置 | `configs/training/motion_network.json` |
-| 小规模链路测试配置 | `configs/training/motion_network_smoke.json` |
+| 多步训练、验证选择、断点续训、独立评估 | `../world-model-training/src/wmal/training/motion_trainer.py` |
+| MuJoCo 采样、失败记录、数据来源清单 | `../world-model-training/src/wmal/training/motion_collector.py` |
+| collect/train/evaluate 命令 | `../world-model-training/scripts/train_motion_network.py` |
+| 默认网络训练配置 | `../world-model-training/configs/training/motion_network.json` |
+| 小规模链路测试配置 | `../world-model-training/configs/training/motion_network_smoke.json` |
 | G1 规划器接入配置 | `configs/g1_neural.json` |
 
 ```mermaid
@@ -59,34 +59,35 @@ flowchart LR
 
 ## 从采样到规划
 
-下面命令均在项目根目录、本项目 `wmal` 环境运行；项目已有 `learning`、`simulation`、`walking` 可选依赖。
+下面命令均在项目根目录、本项目 `wmal` 环境运行；运行包使用 `model-runtime`、`simulation`、`walking`，训练包提供 `learning`。
 
 ```bash
 conda activate wmal
 export PYTHONPATH="$PWD/src"
-python -m pip install -e '.[learning,simulation,walking]'
+python -m pip install -e '.[model-runtime,simulation,walking]'
+python -m pip install -e '../world-model-training[learning]'
 
 # 明确分开训练/验证/测试回合；输出存在时拒绝覆盖。
-PYTHONPATH=src python scripts/train_motion_network.py collect \
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py collect \
   --output data/g1_locomotion/neural_transitions.json \
   --train-episodes 8 --validation-episodes 3 --test-episodes 3 \
   --steps 100 --seed 0
 
 # 训练。test 只统计预留回合数量，不参与梯度或检查点选择。
-PYTHONPATH=src python scripts/train_motion_network.py train \
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py train \
   --dataset data/g1_locomotion/neural_transitions.json \
   --checkpoint runs/motion_network/model.pt \
-  --config configs/training/motion_network.json
+  --config ../world-model-training/configs/training/motion_network.json
 
 # 从 latest 快照继续，epochs 是总训练轮数。
-PYTHONPATH=src python scripts/train_motion_network.py train \
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py train \
   --dataset data/g1_locomotion/neural_transitions.json \
   --checkpoint runs/motion_network/model.pt \
-  --config configs/training/motion_network.json \
+  --config ../world-model-training/configs/training/motion_network.json \
   --resume runs/motion_network/model.latest.pt --epochs 150
 
 # 模型冻结后显式评估保留测试集。
-PYTHONPATH=src python scripts/train_motion_network.py evaluate \
+PYTHONPATH=src python ../world-model-training/scripts/train_motion_network.py evaluate \
   --dataset data/g1_locomotion/neural_transitions.json \
   --checkpoint runs/motion_network/model.pt --split test --horizon 3 \
   --output runs/motion_network/evaluation.json

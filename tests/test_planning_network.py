@@ -18,10 +18,6 @@ class PlanningNetworkTests(unittest.TestCase):
         self.dataset = self.root/'data.json'
         fixture(self.dataset)
 
-    def config(self,epochs=6):
-        from wmal.training.motion_trainer import TrainingConfig
-        return TrainingConfig(hidden=(16,16),members=2,epochs=epochs,horizon=3,batch_size=32,
-                              learning_rate=.003,seed=19,architecture='latent_state')
 
     def test_velocity_targets_reconstruct_terminal_state_when_average_velocity_differs(self):
         import torch
@@ -35,50 +31,6 @@ class PlanningNetworkTests(unittest.TestCase):
         legacy = integrate(before,target_outputs(before,after,action),action)
         self.assertGreater(float((legacy[:,3:6]-after[:,3:6]).abs().sum()),.5)
 
-    def test_latent_training_learns_restores_and_publishes_batch_planning_evidence(self):
-        from wmal.training.motion_trainer import train_motion,evaluate_motion
-        from wmal.models.motion_network import load
-        from wmal.locomotion.planner import G1RolloutPlanner
-        from wmal.locomotion.contracts import G1Goal
-        report = train_motion(self.dataset,self.root/'model.pt',self.config(25))
-        self.assertLess(report['best_validation_loss'],report['history'][0]['validation_loss']*.8)
-        model = load({'checkpoint':self.root/'model.pt'})
-        splits,_ = load_motion_episodes(self.dataset)
-        state,action,_ = next(iter(splits['test'].values()))[0]
-        batch = model.rollout(state,[[action]*3,[action]*3])
-        self.assertEqual(batch.members.shape,(2,2,3,9))
-        self.assertEqual(batch.prediction(0,2).state.step_id,state.step_id+3)
-        self.assertAlmostEqual(batch.prediction(0,2).state.sim_time_s,state.sim_time_s+1.5)
-        np.testing.assert_allclose(batch.members[:,0],batch.members[:,1])
-        from wmal.models.motion_network import state_vector
-        np.testing.assert_allclose(state_vector(batch.prediction(0,0).state),
-                                   state_vector(model.predict(state,action,.5).state),atol=1e-7)
-        model.save(self.root/'copy.pt')
-        restored = load({'checkpoint':self.root/'copy.pt'})
-        self.assertEqual(restored.version,model.version)
-        np.testing.assert_array_equal(restored.rollout(state,[[action]*3,[action]*3]).members,batch.members)
-        plan = G1RolloutPlanner(model,samples=8,horizon=3).plan(state,G1Goal(.4,0.))
-        self.assertEqual(plan.evidence['network_forward_calls'],6)
-        self.assertEqual(plan.evidence['model_imagination_steps'],48)
-        self.assertIsNone(plan.evidence['success_probability'])
-        json.dumps(asdict(plan),allow_nan=False)
-        metrics = evaluate_motion(self.dataset,self.root/'model.pt',horizon=3)
-        self.assertEqual(len(metrics['terminal_velocity_rmse_m_s_by_step']),3)
-
-    def test_latent_resume_and_test_isolation(self):
-        from wmal.training.motion_trainer import train_motion
-        full = train_motion(self.dataset,self.root/'full.pt',self.config())
-        part = train_motion(self.dataset,self.root/'part.pt',self.config(3))
-        resumed = train_motion(self.dataset,self.root/'part.pt',self.config(),resume=part['latest_checkpoint'])
-        self.assertEqual(full['model_version'],resumed['model_version'])
-        rows = json.loads(self.dataset.read_text())
-        for row in rows['rows']:
-            if row['split']=='test':
-                row['before']['x']+=10.
-                row['after']['x']+=10.
-        self.dataset.write_text(json.dumps(rows))
-        isolated = train_motion(self.dataset,self.root/'isolated.pt',self.config())
-        self.assertEqual(full['model_version'],isolated['model_version'])
 
     def test_rollout_retains_nonlinear_member_paths_instead_of_merging_every_step(self):
         import torch

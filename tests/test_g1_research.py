@@ -1,9 +1,9 @@
 from dataclasses import replace
-import tempfile
+import numpy as np
 import unittest
 
 from wmal.locomotion.contracts import G1State, G1VelocityAction, G1Goal
-from wmal.locomotion.learned import LearnedG1Dynamics, load
+from wmal.locomotion.learned import LearnedG1Dynamics
 from wmal.locomotion.feedback import ResidualFeedback
 from wmal.locomotion.planner import G1RolloutPlanner
 
@@ -18,23 +18,13 @@ class ResearchTests(unittest.TestCase):
                             x=action.vx * .4, y=action.vy * .4)
             self.rows.append((self.state, action, after))
 
-    def test_learned_prediction_roundtrip_and_planning(self):
-        model = LearnedG1Dynamics.fit(self.rows)
-        action = G1VelocityAction(.2, 0., 0., .5)
-        prediction = model.predict(self.state, action, .5)
-        self.assertAlmostEqual(prediction.state.x, .08, delta=.01)
-        with tempfile.TemporaryDirectory() as directory:
-            model.save(directory + '/model.json')
-            restored = load({'checkpoint': directory + '/model.json'})
-            self.assertEqual(restored.version, model.version)
-            self.assertEqual(restored.predict(self.state, action, .5), prediction)
-        plan = G1RolloutPlanner(model).plan(self.state, G1Goal(1., 0.))
-        self.assertGreater(plan.action.vx, 0.)
-        with self.assertRaises(ValueError):
-            model.predict(self.state, action, .2)
 
     def test_feedback_changes_candidate_bounds_and_rejects_stale(self):
-        model = LearnedG1Dynamics.fit(self.rows)
+        weights = np.zeros((2, 10, 6))
+        weights[:, 7, 0] = .8
+        weights[:, 8, 1] = .8
+        weights[:, 0, 5] = .8
+        model = LearnedG1Dynamics(weights, .5, 'feedback-fixture')
         planner = G1RolloutPlanner(model)
         feedback = ResidualFeedback(alpha=1.)
         predicted = self.rows[0][2]
@@ -46,11 +36,3 @@ class ResearchTests(unittest.TestCase):
             feedback.update(predicted, self.state, planner)
         feedback.update(predicted, predicted, planner)
         self.assertEqual(planner.feedback_scale, 1.)
-
-    def test_adaptation_and_mixed_duration(self):
-        prior = LearnedG1Dynamics.fit(self.rows)
-        adapted = LearnedG1Dynamics.fit(self.rows, prior=prior)
-        self.assertNotEqual(prior.version, adapted.version)
-        rows = self.rows + [(self.state, G1VelocityAction(0., 0., 0., .2), self.rows[0][2])]
-        with self.assertRaises(ValueError):
-            LearnedG1Dynamics.fit(rows)

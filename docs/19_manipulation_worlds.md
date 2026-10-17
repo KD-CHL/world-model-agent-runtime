@@ -1,5 +1,7 @@
 # G1 操作任务虚拟工作环境
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 这是依据用户列出的十二项 Unitree 数据集任务设计的程序化虚拟工作环境。沿用现有室内墙体、货架、储物柜，新建带桌腿的工作台及各任务道具。几何尺寸、相机、材质与质量为仿真假设，没有从真实数据集完成标定或场景重建。
 
 ## 十二个场景
@@ -73,7 +75,7 @@ MUJOCO_GL=egl python scripts/workcell_sim.py --all --steps 1000 --render
 一般工作台包含单机器人 29 或双机器人 58 个位置执行器；`stack_block` 另有 2 个代理夹爪位置执行器。可运行无世界模型技能试验并导出 `run_manifest.json`、`events.jsonl` 与 `results.json`：
 
 ```bash
-python scripts/stack_block_baseline.py --output-dir runs/stack_block_baseline_<unique-name>
+python ../world-model-training/scripts/stack_block_baseline.py --output-dir runs/stack_block_baseline_<unique-name>
 ```
 
 输出路径必须是新目录。未完成和失败 episode 保留在成功率分母。运行器明确不加载世界模型；只有当技能基线通过预先冻结的可靠性门槛后，才应开展操作轨迹训练与 A0–A3 对照。现有视觉训练工具仍针对 joint-servo 数据，不应将其结果误称为抓取/堆叠模型验证。

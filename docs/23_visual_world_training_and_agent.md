@@ -1,29 +1,19 @@
 # 视觉世界模型：数据、训练、微调和 Agent 完整命令
 
-## 已验证环境
+## 安装与项目边界
 
-所有命令统一使用本项目的 `wmal` 环境。PyTorch CUDA 12.8、MuJoCo、ONNX Runtime、PyArrow 和 PyAV 均安装在这个环境，不依赖其他项目环境。本机 RTX 5060 Ti 为 8GB，需要包含 sm_120 的 PyTorch 构建；项目固定 `torch==2.11.0+cu128`。
-
-在仓库根目录执行：
+推理、Agent、仿真和监控在本运行仓库；采集、数据导入与训练命令在相邻的 `world-model-training`。运行包通过 `model-runtime` 提供神经推理依赖，训练和数据 extra 从训练项目安装。以下命令在运行仓库根目录、选定的 Python 环境中执行：
 
 ```bash
-cd /home/chl/GitHub/CodeSpace/world-model-agent-lab-main
-conda activate wmal
-export PYTHONPATH="$PWD/src"
+python -m pip install -e '.[model-runtime,simulation,walking]'
+python -m pip install -e '../world-model-training[visual-world,visual-data,robot-data]'
+python -m pip check
 python -c "import torch,mujoco; print(torch.__version__, torch.cuda.is_available(), mujoco.__version__)"
 ```
 
-首次安装使用仓库的 `environment.yml`。已有 `wmal` 环境补齐依赖：
+仅运行已发布模型时，无需安装训练项目。首次创建运行环境可使用本仓库 `environment.yml`，训练环境见 [训练项目说明](../../world-model-training/README.md)。CUDA 构建按硬件选择；历史 RTX 5060 Ti 实验使用过 CUDA 12.8 构建，运行包不再固定这个版本。
 
-```bash
-conda activate wmal
-export PYTHONPATH="$PWD/src"
-python -m pip install 'torch==2.11.0+cu128' --index-url https://download.pytorch.org/whl/cu128
-python -m pip install -e '.[simulation,walking,visual-world,visual-data,robot-data]'
-python -m pip check
-```
-
-普通训练/仿真启动时，将 PYTHONPATH 设置为本项目 `src`，不要追加 shell 自动加入的 ROS Python 路径或其他项目环境。系统 ROS 的 Python 3.12 包与 `wmal` 的 Python 3.10 ABI 不兼容；ROS 接入仍需单独验证。原始数据和 `runs/` 已在 gitignore 排除，本轮生成数据放 `data/processed/`，权重、校准、日志放 `runs/`，未提交大型文件。
+可编辑安装后无需把其他项目环境的 site-packages 加入 `PYTHONPATH`。ROS 中间件及 Python ABI 按 [ROS 2 安装指南](26_ros2_local_setup.md) 单独配置。原始数据与 `runs/` 不随 Git 分发；运行时使用实际存在、语义兼容的 checkpoint 和校准路径。下文历史数据与实验记录保留其原始路径，训练复现时应显式传入本机的数据/输出路径。
 
 ## 已有模型到底用什么训练
 
@@ -51,7 +41,7 @@ python -m pip check
 - 进度写 stderr；最终 JSON/原有 JSONL 事件仍写 stdout，磁盘指标不变。训练器 Python API 默认安静，CLI 默认开启。
 
 批量运行加 `--no-progress` 可关闭所有训练提示，不改变模型结果。ETA 是已完成训练速度的估计，开始时为 `?`；首次数据哈希校验/加载在正式进度条之前，并有单独状态提示。
-进度依赖 `tqdm` 已加入本项目 `learning` / `visual-world` extra，不需要其他环境。该改动不接管上游 UniFoLM 自己的训练循环，也未给旧的其他训练入口添加进度条。
+进度依赖 `tqdm` 已加入训练项目 `learning` / `visual-world` extra，不需要其他环境。该改动不接管上游 UniFoLM 自己的训练循环，也未给旧的其他训练入口添加进度条。
 
 本机已导入的数据可直接启动（输出目录必须新建/为空）：
 

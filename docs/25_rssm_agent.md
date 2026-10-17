@@ -1,5 +1,7 @@
 # RSSM 世界模型与多子目标 Agent
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 这条路线在现有视觉网络上加入**确定性记忆 + 离散随机潜变量 + 动作先验 + 观测后验**。
 旧 CNN/GRU 集成仍为默认对照，不是把原网络改名为 Dreamer。
 设计、固定版本源码与研究假设见 [完整规格](superpowers/specs/2026-10-02-rssm-agent-design.md)，
@@ -92,13 +94,13 @@ export PYTHONPATH=src
 export MUJOCO_GL=egl
 ```
 
-若需要补充依赖，只在 `wmal` 内执行 `python -m pip install -e '.[visual-world,simulation]'`。
+若需要补充依赖，只在 `wmal` 内执行 `python -m pip install -e '.[model-runtime,simulation]'`，再安装 `python -m pip install -e '../world-model-training[visual-world]'`。
 不要创建 Dreamer/Every-Embodied 的环境，不更换现有 CUDA 构建。
 
 已有本机数据：`data/processed/visual_g1_20260930/manifest.json`。重新采集：
 
 ```bash
-python scripts/visual_world.py collect --output data/processed/rssm_g1_v1 \
+python ../world-model-training/scripts/visual_world.py collect --output data/processed/rssm_g1_v1 \
   --task stack_block --episodes 40 --steps 16 --image-size 64 --seed 0
 ```
 
@@ -113,9 +115,9 @@ python scripts/visual_world.py collect --output data/processed/rssm_g1_v1 \
 训练新模型（CUDA 可用时用 `--device cuda`，CPU 改为 `cpu`）：
 
 ```bash
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_world.json --output runs/rssm_g1_v1 --device cuda
+  --config ../world-model-training/configs/training/rssm_world.json --output runs/rssm_g1_v1 --device cuda
 ```
 
 输出：`best.pt`、`last.pt`、`history.json`、`training_report.json`。默认显示 epoch、
@@ -123,17 +125,17 @@ python scripts/visual_world.py train \
 运行目录须新建/为空，防止覆盖证据。`--pretrained` 是微调，不是 optimizer/RNG 续训。
 
 ```bash
-python scripts/visual_world.py train \
+python ../world-model-training/scripts/visual_world.py train \
   --manifest data/processed/visual_g1_20260930/manifest.json \
-  --config configs/training/rssm_world.json --output runs/rssm_g1_finetuned \
+  --config ../world-model-training/configs/training/rssm_world.json --output runs/rssm_g1_finetuned \
   --pretrained runs/rssm_g1_v1/best.pt --freeze-encoder --epochs 10 --device cuda
 
-python scripts/visual_world.py calibrate \
+python ../world-model-training/scripts/visual_world.py calibrate \
   --manifest data/processed/visual_g1_20260930/manifest.json \
   --checkpoint runs/rssm_g1_finetuned/best.pt \
   --output runs/rssm_g1_finetuned/calibration.json --horizon 4 --alpha 0.2 --device cuda
 
-python scripts/visual_world.py evaluate \
+python ../world-model-training/scripts/visual_world.py evaluate \
   --manifest data/processed/visual_g1_20260930/manifest.json \
   --checkpoint runs/rssm_g1_finetuned/best.pt \
   --calibration runs/rssm_g1_finetuned/calibration.json \

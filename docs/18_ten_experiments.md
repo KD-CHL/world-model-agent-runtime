@@ -1,5 +1,7 @@
 # 十项 G1 动作规划实验与训练优化
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 ## 实验设计
 
 所有任务均由 mission agent 分配目标、导航层生成路点、世界模型展开候选动作、局部规划器选择第一段动作，交由已训练低层行走策略在 MuJoCo 执行。任务目标不是预录的动作轨迹。
@@ -49,18 +51,18 @@ conda activate wmal
 export PYTHONPATH="$PWD/src"
 
 # 使用已采集的数据训练优化版本，保留原模型
-python scripts/g1_research.py train --optimize --checkpoint runs/g1_research/optimized.json
+python ../world-model-training/scripts/g1_research.py train --optimize --checkpoint runs/g1_research/optimized.json
 
 # 十项实验，每项三个规划随机种子
-python scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
+python ../world-model-training/scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
   --output runs/g1_suite_new --seeds 0 1 2
 
 # 可视化单项实验
-python scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
+python ../world-model-training/scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
   --output runs/g1_suite_view --experiments 06_obstacle --viewer
 
 # 关闭残差反馈的消融对照
-python scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
+python ../world-model-training/scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \
   --output runs/g1_suite_no_feedback --seeds 0 1 2 --no-feedback
 ```
 

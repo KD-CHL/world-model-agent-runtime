@@ -137,62 +137,6 @@ class VisualDataTests(unittest.TestCase):
                               extra_arrays={'event_states': event_states,
                                             'event_state_mask': np.ones_like(event_states)})
 
-    def test_event_persistence_metrics_use_origin_label_not_first_future_label(self):
-        from types import SimpleNamespace
-        from unittest.mock import patch
-        import wmal.training.visual_trainer as trainer
-        from wmal.datasets.visual_sequences import write_episode, write_manifest
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            manifest = make_dataset(root)
-            payload = json.loads(manifest.read_text())
-            rows = payload['episodes']
-            for row in rows:
-                path = root / row['path']
-                with np.load(path, allow_pickle=False) as arrays:
-                    rgb, states, actions = arrays['rgb'].copy(), arrays['states'].copy(), arrays['actions'].copy()
-                events = np.zeros((8, 1), dtype=np.float32)
-                events[0, 0] = 1.0
-                event_states = np.concatenate((np.zeros((1, 1), dtype=np.float32), events), axis=0)
-                write_episode(path, rgb, states, actions, events=events,
-                              event_mask=np.ones_like(events),
-                              extra_arrays={'event_states': event_states,
-                                            'event_state_mask': np.ones_like(event_states)},
-                              overwrite=True)
-            semantics = dict(payload['semantics'])
-            semantics.pop('event_names', None)
-            manifest = write_manifest(manifest, rows, source=payload['source'],
-                                      event_names=['grasped'], **semantics)
-            semantics = json.loads(manifest.read_text())['semantics']
-
-            class FixedEventModel:
-                version = 'fixed-event-model'
-                config = SimpleNamespace(context_steps=0)
-                metadata = {'episode_lineage': {
-                    'schema': 'wmal.episode_lineage.v1',
-                    'train': {'episode_ids': [], 'sha256': []},
-                    'selection': {'episode_ids': ['validation_0', 'validation_1'], 'sha256': []}}}
-
-                def __init__(self):
-                    self.semantics = semantics
-
-                def predict_sample(self, sample, actions=None):
-                    horizon = len(sample['actions'])
-                    return {
-                        'states': np.zeros((1, horizon, sample['states'].shape[-1]), dtype=np.float32),
-                        'frames': np.zeros((1, horizon, 3, 32, 32), dtype=np.float32),
-                        'event_probabilities': np.full((1, horizon, 1), .8, dtype=np.float32),
-                        'event_probability_names': ['grasped'],
-                    }
-
-            with patch.object(trainer.VisualWorldModel, 'load', return_value=FixedEventModel()):
-                report = trainer.evaluate_visual(manifest, root / 'unused.pt',
-                                                  horizon=2, split='validation')
-            metrics = report['event_prediction_metrics']
-            self.assertAlmostEqual(metrics['persistence_brier_by_horizon'][0], 2. / 7., places=6)
-            self.assertEqual(metrics['scored_windows_by_horizon'], [14, 14])
-            self.assertEqual(metrics['scored_labels_by_horizon'], [14, 14])
 
     def test_duplicate_episode_or_content_and_wrong_alignment_are_rejected(self):
         from wmal.datasets.visual_sequences import VisualDataset, write_episode
@@ -217,106 +161,7 @@ class VisualDataTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec('torch'),'Optional learning dependencies not installed')
 class VisualNetworkTests(unittest.TestCase):
-    def test_finetune_appends_named_event_channel_and_preserves_old_head_rows(self):
-        import torch
-        from wmal.datasets.visual_sequences import write_manifest
-        from wmal.training.visual_trainer import VisualTrainingConfig, train_visual
-        from wmal.models.visual_latent import VisualWorldModel
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            manifest=make_dataset(root)
-            payload=json.loads(manifest.read_text())
-            parent_events=['bilateral_grasp_contact','object_lifted','stable_stack']
-            for row in payload['episodes']:
-                path=root/row['path']
-                with np.load(path) as data:
-                    arrays={key:data[key] for key in data.files}
-                arrays['events']=np.zeros((8,3),dtype=np.float32)
-                arrays['event_mask']=np.ones((8,3),dtype=np.float32)
-                np.savez(path,**arrays)
-            semantics=dict(payload['semantics'])
-            semantics.pop('event_names',None)
-            write_manifest(manifest,payload['episodes'],**semantics,
-                           source=payload['source'],event_names=parent_events)
-            config=VisualTrainingConfig(epochs=1,members=2,batch_size=16,horizon=2,
-                                        latent_dim=16,hidden_dim=24,learning_rate=.001,weight_decay=0.)
-            train_visual(manifest,root/'parent',config)
-            parent=VisualWorldModel.load(root/'parent/best.pt')
-            parent_rows=[member.event_head.weight.detach().clone() for member in parent.members]
 
-            payload=json.loads(manifest.read_text())
-            next_events=parent_events+['object_dropped_after_lift']
-            for row in payload['episodes']:
-                path=root/row['path']
-                with np.load(path) as data:
-                    arrays={key:data[key] for key in data.files}
-                extra=np.zeros((8,1),dtype=np.float32)
-                extra_mask=np.zeros((8,1),dtype=np.float32)
-                if row['split']=='train':
-                    extra[:,0]=1.
-                    extra_mask[:,0]=1.
-                arrays['events']=np.concatenate((arrays['events'],extra),axis=1)
-                arrays['event_mask']=np.concatenate((np.zeros_like(arrays['event_mask']),extra_mask),axis=1)
-                np.savez(path,**arrays)
-            semantics=dict(payload['semantics'])
-            semantics.pop('event_names',None)
-            write_manifest(manifest,payload['episodes'],**semantics,
-                           source=payload['source'],event_names=next_events)
-
-            train_visual(manifest,root/'expanded',config,pretrained=root/'parent/best.pt')
-            expanded=VisualWorldModel.load(root/'expanded/best.pt')
-            self.assertEqual(expanded.semantics['event_names'],next_events)
-            self.assertEqual(expanded.metadata['event_supervised_channels'],[True,True,True,True])
-            for old_rows,member in zip(parent_rows,expanded.members):
-                torch.testing.assert_close(old_rows,member.event_head.weight[:3],rtol=0,atol=0)
-            prediction=expanded.predict(np.zeros((3,32,32)),np.zeros(2),np.zeros((2,2)))
-            self.assertEqual(prediction['event_probability_names'],next_events)
-            self.assertEqual(prediction['event_probabilities'].shape,(2,2,4))
-
-    def test_finetune_retains_ancestor_exclusions_across_repartitioned_manifests(self):
-        from wmal.training.visual_trainer import VisualTrainingConfig, train_visual, evaluate_visual
-        from wmal.models.horizon_calibration import calibrate_visual
-        from wmal.models.visual_latent import VisualWorldModel
-        from wmal.logging.manifest import atomic_json
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            manifest=make_dataset(root)
-            config=VisualTrainingConfig(epochs=1,members=2,batch_size=16,horizon=2,
-                                       latent_dim=16,hidden_dim=24)
-            train_visual(manifest,root/'parent',config)
-            payload=json.loads(manifest.read_text())
-            # Former training/selection episodes become calibration/test; train on new episodes.
-            for row in payload['episodes']:
-                if row['episode_id']=='train_0': row['split']='calibration'
-                elif row['episode_id']=='validation_0': row['split']='test'
-                elif row['episode_id']=='calibration_0': row['split']='train'
-                elif row['episode_id']=='test_0': row['split']='validation'
-            changed=root/'repartitioned.json'
-            atomic_json(changed,payload)
-            train_visual(changed,root/'fine',config,pretrained=root/'parent/best.pt')
-            checkpoint=root/'fine/best.pt'
-            with self.assertRaisesRegex(ValueError,'overlap'):
-                calibrate_visual(changed,checkpoint,root/'invalid_calibration.json',horizon=2,alpha=.2)
-            with self.assertRaisesRegex(ValueError,'overlap'):
-                evaluate_visual(changed,checkpoint,horizon=2)
-            # A further fine-tune must still reject ancestor training as validation.
-            for row in payload['episodes']:
-                if row['episode_id']=='train_0': row['split']='validation'
-            atomic_json(changed,payload)
-            with self.assertRaisesRegex(ValueError,'overlap'):
-                train_visual(changed,root/'grandchild',config,pretrained=checkpoint)
-            # Renaming an episode does not erase its ancestor content identity.
-            for row in payload['episodes']:
-                if row['episode_id']=='train_0': row['episode_id']='renamed_ancestor_train'
-            atomic_json(changed,payload)
-            with self.assertRaisesRegex(ValueError,'overlap'):
-                train_visual(changed,root/'renamed',config,pretrained=checkpoint)
-            # Old fine-tuned checkpoints with unknown ancestry must fail closed.
-            model=VisualWorldModel.load(checkpoint)
-            model.metadata.pop('episode_lineage',None)
-            model.save(root/'unknown_lineage.pt')
-            with self.assertRaisesRegex(ValueError,'lineage'):
-                evaluate_visual(manifest,root/'unknown_lineage.pt',horizon=2)
 
     def test_zero_residual_preserves_background_instead_of_relearning_static_world(self):
         import torch
@@ -344,48 +189,6 @@ class VisualNetworkTests(unittest.TestCase):
         self.assertGreater(float((prediction['rgb'][0]-prediction['rgb'][1]).abs().max().detach()), 1e-6)
         (prediction['rgb'].mean()+prediction['state'].mean()).backward()
         self.assertGreater(float(model.transition.weight_ih.grad.abs().sum()), 0.)
-
-    def test_training_finetune_freeze_roundtrip_and_test_isolation(self):
-        from wmal.training.visual_trainer import VisualTrainingConfig, train_visual, evaluate_visual
-        from wmal.models.visual_latent import VisualWorldModel
-        from wmal.datasets.visual_sequences import VisualDataset
-        import torch
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            manifest=make_dataset(root)
-            config=VisualTrainingConfig(epochs=3, members=2, batch_size=8, horizon=2,
-                                       latent_dim=16, hidden_dim=24, seed=5, learning_rate=.003)
-            report=train_visual(manifest, root/'run', config)
-            self.assertTrue(np.isfinite(report['best_validation_loss']))
-            model=VisualWorldModel.load(root/'run/best.pt')
-            sample=VisualDataset(manifest,'test',horizon=2)[0]
-            result=model.predict(sample['rgb'][0],sample['states'][0],sample['actions'])
-            self.assertEqual(result['states'].shape,(2,2,2))
-            self.assertEqual(result['frames'].shape,(2,2,3,32,32))
-            model.save(root/'copy.pt')
-            restored=VisualWorldModel.load(root/'copy.pt')
-            self.assertEqual(model.version,restored.version)
-            np.testing.assert_array_equal(result['states'],restored.predict(
-                sample['rgb'][0],sample['states'][0],sample['actions'])['states'])
-            metrics=evaluate_visual(manifest,root/'run/best.pt',horizon=2)
-            self.assertEqual(metrics['split'],'test')
-            self.assertEqual(len(metrics['frame_mse_by_horizon']),2)
-            self.assertIn('persistence_frame_mse_by_horizon',metrics)
-            self.assertTrue(np.all(np.array(metrics['zero_action_frame_sensitivity_by_horizon'])>0))
-            payload=json.loads(manifest.read_text())
-            for row in payload['episodes']:
-                if row['split']=='test':
-                    with np.load(root/row['path']) as f:
-                        values={key:f[key] for key in f.files}
-                    values['states']+=100
-                    np.savez(root/row['path'],**values)
-            isolated=train_visual(manifest,root/'isolated',config)
-            self.assertEqual(report['model_version'], isolated['model_version'])
-            fine=train_visual(manifest,root/'fine',config,pretrained=root/'run/best.pt',freeze_encoder=True)
-            tuned=VisualWorldModel.load(root/'fine/best.pt')
-            for before,after in zip(model.members,tuned.members):
-                for key,value in before.encoder.state_dict().items():
-                    self.assertTrue(torch.equal(value,after.encoder.state_dict()[key]))
 
 
 class HorizonCalibrationTests(unittest.TestCase):

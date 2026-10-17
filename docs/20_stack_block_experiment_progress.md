@@ -21,7 +21,7 @@ Seed 106 is the observed failure: the manipulated block tips during placement an
 
 Dataset: `runs/stack_block_visual_jittered_40_v2/manifest.json`, 41 episodes total. The 40 generated episodes are split by episode (24 train, 6 validation, 6 calibration, 4 test); one separately replayed seed-106 failure is added to test. Each episode aligns 64×64 RGB, 70-dimensional measured robot state, 14-dimensional commanded action, event labels, object truth, simulation timestamps, and step IDs at a 20 ms control period. The original v2 model did not consume `object_truth`. The derived `manifest_v3.json` explicitly names all 39 object-state dimensions; the truth is used only as a future prediction target and held-out label, never as an observation input.
 
-Training used [`stack_block_visual_v2.json`](../configs/training/stack_block_visual_v2.json), CUDA, 3 ensemble members, 5 epochs, and the existing episode-disjoint trainer. Model version: `visual-23507a4e181f6f130653`.
+Training used [`stack_block_visual_v2.json`](../../world-model-training/configs/training/stack_block_visual_v2.json), CUDA, 3 ensemble members, 5 epochs, and the existing episode-disjoint trainer. Model version: `visual-23507a4e181f6f130653`.
 
 | Artifact | SHA-256 |
 | --- | --- |
@@ -51,7 +51,7 @@ The model improves robot-state prediction but does not beat the simple persisten
 
 ## Stage 2 extension: named object-state prediction target
 
-`configs/training/stack_block_visual_v3.json` adds a supervised 39-dimensional object-state head. Training completed on CUDA with 3 ensemble members and 5 epochs; the selected checkpoint is model version `visual-b6d5dac956aa00a89d64`. Validation object-state loss fell from 0.332 to 0.215 normalized MSE. Test evaluation used the same five held-out episodes and 240 windows (stride 32), with no model selection or calibration on test data.
+`../world-model-training/configs/training/stack_block_visual_v3.json` adds a supervised 39-dimensional object-state head. Training completed on CUDA with 3 ensemble members and 5 epochs; the selected checkpoint is model version `visual-b6d5dac956aa00a89d64`. Validation object-state loss fell from 0.332 to 0.215 normalized MSE. Test evaluation used the same five held-out episodes and 240 windows (stride 32), with no model selection or calibration on test data.
 
 | Object-state metric | Model | Persistence |
 | --- | ---: | ---: |
@@ -66,7 +66,7 @@ Reproduction (from the repository root, with the `tf-agent` environment used for
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path + '\\src'
-python -c "from wmal.training.visual_cli import main; main(['train','--manifest','runs/stack_block_visual_jittered_40_v2/manifest_v3.json','--output','runs/stack_block_world_model_v3','--config','configs/training/stack_block_visual_v3.json','--no-progress'])"
+python -c "from wmal.training.visual_cli import main; main(['train','--manifest','runs/stack_block_visual_jittered_40_v2/manifest_v3.json','--output','runs/stack_block_world_model_v3','--config','../world-model-training/configs/training/stack_block_visual_v3.json','--no-progress'])"
 python -c "from wmal.training.visual_cli import main; main(['evaluate','--manifest','runs/stack_block_visual_jittered_40_v2/manifest_v3.json','--checkpoint','runs/stack_block_world_model_v3/best.pt','--output','runs/stack_block_world_model_v3/test_report.json','--horizon','4','--window-stride','32','--device','cuda'])"
 ```
 
@@ -146,7 +146,7 @@ Reproduction for the external evaluation (from the repository root, using `tf-ag
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path + '\\src'
-python scripts/collect_stack_block_visual.py --config configs/tasks/stack_block_disturbed_dev.json --output-dir runs/stack_block_visual_external_80_v1 --seed-start 7400 --episodes 80 --profile disturbed --image-size 128 --recovery-policy repeat_place_once
+python ../world-model-training/scripts/collect_stack_block_visual.py --config configs/tasks/stack_block_disturbed_dev.json --output-dir runs/stack_block_visual_external_80_v1 --seed-start 7400 --episodes 80 --profile disturbed --image-size 128 --recovery-policy repeat_place_once
 python -m wmal.training.visual_cli calibrate --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v8_localization/best.pt --output runs/stack_block_world_model_v8_localization/external_state_calibration.json --horizon 4 --alpha 0.2 --window-stride 32 --device cuda
 python -m wmal.training.visual_cli calibrate-object --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v8_localization/best.pt --output runs/stack_block_world_model_v8_localization/external_object_calibration.json --horizon 4 --alpha 0.2 --window-stride 32 --device cuda
 python -m wmal.training.visual_cli evaluate --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v8_localization/best.pt --output runs/stack_block_world_model_v8_localization/external_test_report.json --horizon 4 --window-stride 32 --device cuda --calibration runs/stack_block_world_model_v8_localization/external_state_calibration.json --object-calibration runs/stack_block_world_model_v8_localization/external_object_calibration.json
@@ -181,7 +181,7 @@ Reproduce from the repository root with the `tf-agent` environment:
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path + '\\src'
 python -m wmal.training.visual_cli fit-rgb-xy-localizer --manifest runs/stack_block_visual_external_80_v1/manifest.json --output runs/stack_block_rgbxy_localizer_dev_v2 --epochs 24 --batch-size 128 --frame-stride 16 --max-samples-per-episode 32 --learning-rate 0.0003 --seed 2411 --device cuda
-python scripts/collect_stack_block_visual.py --config configs/tasks/stack_block_disturbed_dev.json --output-dir runs/stack_block_rgbxy_localizer_external_80_v1 --seed-start 7500 --episodes 80 --profile disturbed --image-size 128 --recovery-policy repeat_place_once
+python ../world-model-training/scripts/collect_stack_block_visual.py --config configs/tasks/stack_block_disturbed_dev.json --output-dir runs/stack_block_rgbxy_localizer_external_80_v1 --seed-start 7500 --episodes 80 --profile disturbed --image-size 128 --recovery-policy repeat_place_once
 python -m wmal.training.visual_cli calibrate-rgb-xy-localizer --manifest runs/stack_block_rgbxy_localizer_external_80_v1/manifest.json --checkpoint runs/stack_block_rgbxy_localizer_frozen_v1/best.pt --output runs/stack_block_rgbxy_localizer_frozen_v1/external_calibration.json --alpha 0.2 --frame-stride 16 --max-samples-per-episode 32 --batch-size 128 --device cuda
 python -m wmal.training.visual_cli evaluate-rgb-xy-localizer --manifest runs/stack_block_rgbxy_localizer_external_80_v1/manifest.json --checkpoint runs/stack_block_rgbxy_localizer_frozen_v1/best.pt --output runs/stack_block_rgbxy_localizer_frozen_v1/external_test_report.json --split test --frame-stride 16 --max-samples-per-episode 32 --batch-size 128 --device cuda --calibration runs/stack_block_rgbxy_localizer_frozen_v1/external_calibration.json
 ```
@@ -204,7 +204,7 @@ Recorded artifact hashes: manifest `a577cd2bc3280ee7af4b82199ebab6672fbb0a4fc67f
 
 v9 fine-tuned the frozen v8 checkpoint on the train split (48 episodes) of `stack_block_visual_external_80_v1`; the eight validation episodes were used for checkpoint selection. The 16-episode test split was not read for this v9 run. This collection's test split had already been evaluated for v8, and those findings motivated further object-prediction work, so it is no longer a blind final test for a successor candidate. Do not report it as an independent v9 test.
 
-The candidate used `configs/training/stack_block_visual_v9_h32.json`, a 32-control-step horizon at the 20 ms control period (0.64 s), and selected epoch 6 by global validation loss 4.8814. The validation evaluation used 8 episodes, 364 windows, and stride 32. Model version: `visual-251091eed33c95b031c1`.
+The candidate used `../world-model-training/configs/training/stack_block_visual_v9_h32.json`, a 32-control-step horizon at the 20 ms control period (0.64 s), and selected epoch 6 by global validation loss 4.8814. The validation evaluation used 8 episodes, 364 windows, and stride 32. Model version: `visual-251091eed33c95b031c1`.
 
 | Validation metric | v9 model | Persistence |
 | --- | ---: | ---: |
@@ -220,7 +220,7 @@ Reproduction from the repository root with the `tf-agent` environment:
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path + '\src'
-python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_external_80_v1/manifest.json --output runs/stack_block_world_model_v9_h32 --config configs/training/stack_block_visual_v9_h32.json --pretrained runs/stack_block_world_model_v8_localization/best.pt --no-progress
+python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_external_80_v1/manifest.json --output runs/stack_block_world_model_v9_h32 --config ../world-model-training/configs/training/stack_block_visual_v9_h32.json --pretrained runs/stack_block_world_model_v8_localization/best.pt --no-progress
 python -m wmal.training.visual_cli evaluate --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v9_h32/best.pt --output runs/stack_block_world_model_v9_h32/validation_h32_report.json --horizon 32 --window-stride 32 --device cuda --split validation
 ```
 
@@ -270,7 +270,7 @@ Reproduce the continuation and validation evaluation from the repository root wi
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path + '\src'
-python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_external_80_v1/manifest.json --output runs/stack_block_world_model_v10_context32_finetune5 --config configs/training/stack_block_visual_v10_context32_finetune5.json --pretrained runs/stack_block_world_model_v10_context32/last.pt --no-progress
+python -m wmal.training.visual_cli train --manifest runs/stack_block_visual_external_80_v1/manifest.json --output runs/stack_block_world_model_v10_context32_finetune5 --config ../world-model-training/configs/training/stack_block_visual_v10_context32_finetune5.json --pretrained runs/stack_block_world_model_v10_context32/last.pt --no-progress
 python -m wmal.training.visual_cli evaluate --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v10_context32_finetune5/best.pt --output runs/stack_block_world_model_v10_context32_finetune5/validation_h32_report.json --horizon 32 --window-stride 32 --device cuda --split validation
 python -m wmal.training.visual_cli evaluate --manifest runs/stack_block_visual_external_80_v1/manifest.json --checkpoint runs/stack_block_world_model_v10_context32_finetune5/best.pt --output runs/stack_block_world_model_v10_context32_finetune5/validation_h32_event_origin_report.json --horizon 32 --window-stride 32 --device cuda --split validation
 ```

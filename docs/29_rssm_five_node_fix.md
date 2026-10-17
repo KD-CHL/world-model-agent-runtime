@@ -1,5 +1,7 @@
 # 冻结 RSSM 五节点闭环修复与复现
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 当前功能限固定底座 G1 左肩/左肘的到达、保持与返回，不代表积木抓取或全身控制。
 RSSM 检查点权重未修改；低层控制器新增显式版本，控制器与校准在一次任务中冻结。
 旧控制器 `legacy` 仍为默认值，旧训练命令和 Agent 保持兼容。
@@ -41,13 +43,13 @@ conda activate wmal
 export PYTHONPATH="$PWD/src"
 export MUJOCO_GL=egl
 
-python scripts/visual_world.py collect \
+python ../world-model-training/scripts/visual_world.py collect \
   --output data/local/g1_gc2_local_calibration_repro \
   --task stack_block --episodes 40 --steps 16 --image-size 64 --seed 42 \
   --controller gravity_compensated \
   --target-low .21 .73 --target-high .49 1.01
 
-python scripts/visual_world.py calibrate \
+python ../world-model-training/scripts/visual_world.py calibrate \
   --manifest data/local/g1_gc2_local_calibration_repro/manifest.json \
   --checkpoint runs/rssm_temporal_finetuned_smoke_20261002/best.pt \
   --output runs/rssm_gc2_local_calibration_repro.json \
@@ -77,13 +79,13 @@ python scripts/g1_task_agent.py \
 固定校准后另外采集 seed=43 数据，只使用其 test split评估，不再次拟合校准：
 
 ```bash
-python scripts/visual_world.py collect \
+python ../world-model-training/scripts/visual_world.py collect \
   --output data/local/g1_gc2_local_holdout_repro \
   --episodes 40 --steps 16 --image-size 64 --seed 43 \
   --controller gravity_compensated \
   --target-low .21 .73 --target-high .49 1.01
 
-python scripts/visual_world.py evaluate \
+python ../world-model-training/scripts/visual_world.py evaluate \
   --manifest data/local/g1_gc2_local_holdout_repro/manifest.json \
   --checkpoint runs/rssm_temporal_finetuned_smoke_20261002/best.pt \
   --calibration runs/rssm_gc2_local_calibration_repro.json \

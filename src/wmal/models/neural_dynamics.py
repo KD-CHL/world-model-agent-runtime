@@ -15,7 +15,7 @@ def _torch_modules():
         import torch
         from torch import nn
     except ImportError as exc:
-        raise RuntimeError('Install the optional learning dependencies to use neural dynamics') from exc
+        raise RuntimeError('Install the optional model-runtime dependencies to use neural dynamics') from exc
     return torch, nn
 
 
@@ -90,63 +90,3 @@ class NeuralJointDynamics:
         if payload.get('schema_version') != 1:
             raise ValueError('Unknown neural dynamics checkpoint schema')
         return cls(payload['joints'], payload['state_dicts'], payload['version'], device=device)
-
-    @classmethod
-    def fit(cls, train_rows, joints, *, validation_rows=(), members=5, epochs=100,
-            batch_size=256, learning_rate=3e-4, seed=0, device='cpu', version=None):
-        torch, nn = _torch_modules()
-        if not train_rows or members < 1 or epochs < 1 or batch_size < 1 or learning_rate <= 0:
-            raise ValueError('Invalid neural training data or parameters')
-        joints = tuple(joints)
-
-        def arrays(rows):
-            features, deltas = [], []
-            for row in rows:
-                before, after, target = row['before'], row['after'], row['target']
-                if set(before) != set(joints) or set(after) != set(joints) or not set(target).issubset(joints):
-                    raise ValueError('Training transition does not match joint schema')
-                features.append([row['duration_s'], *[before[j] for j in joints],
-                                 *[target.get(j, before[j]) for j in joints]])
-                deltas.append([after[j] - before[j] for j in joints])
-            x, y = np.asarray(features, dtype=np.float32), np.asarray(deltas, dtype=np.float32)
-            if not np.isfinite(x).all() or not np.isfinite(y).all():
-                raise ValueError('Nonfinite training data')
-            return x, y
-
-        x, y = arrays(train_rows)
-        vx, vy = arrays(validation_rows) if validation_rows else (None, None)
-        state_dicts, metrics = [], []
-        for member_index in range(members):
-            member_seed = seed + member_index
-            torch.manual_seed(member_seed)
-            generator = np.random.default_rng(member_seed)
-            sampled = generator.integers(0, len(x), len(x)) if members > 1 else np.arange(len(x))
-            x_tensor = torch.as_tensor(x[sampled], device=device)
-            y_tensor = torch.as_tensor(y[sampled], device=device)
-            model = _network(x.shape[1], y.shape[1]).to(device)
-            optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-            best_state, best_validation = None, float('inf')
-            for _ in range(epochs):
-                model.train()
-                permutation = torch.randperm(len(x_tensor), device=device)
-                for indices in permutation.split(batch_size):
-                    loss = nn.functional.mse_loss(model(x_tensor[indices]), y_tensor[indices])
-                    optimizer.zero_grad(set_to_none=True)
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-                    optimizer.step()
-                model.eval()
-                if vx is not None:
-                    with torch.inference_mode():
-                        valid_loss = float(nn.functional.mse_loss(
-                            model(torch.as_tensor(vx, device=device)), torch.as_tensor(vy, device=device)).item())
-                    if valid_loss < best_validation:
-                        best_validation = valid_loss
-                        best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
-            if best_state is None:
-                best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
-                best_validation = None
-            state_dicts.append(best_state)
-            metrics.append({'member': member_index, 'validation_mse_rad2': best_validation})
-        model_version = version or f'neural-joint-seed{seed}-n{len(train_rows)}'
-        return cls(joints, state_dicts, model_version, device=device), metrics

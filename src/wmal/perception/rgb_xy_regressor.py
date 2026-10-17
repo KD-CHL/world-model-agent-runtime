@@ -1,5 +1,5 @@
 """Episode-isolated RGB-to-stack-block XY perception model."""
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import hashlib
 import json
 import math
@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from wmal.datasets.visual_sequences import _validate_manifest
 from wmal.logging.manifest import atomic_json, sha256_file
@@ -265,96 +264,6 @@ def _evaluate(network,dataset,mean,scale,device,batch_size):
                                               for key,value in sorted(per_episode.items())},
             'per_episode_detection_rate':{key:float(dataset.episode_visible_counts.get(key,0)/count)
                 for key,count in sorted(dataset.episode_candidate_counts.items()) if count}}
-
-
-def train_rgb_xy_localizer(manifest_path,output_dir,*,epochs=20,batch_size=128,
-                           frame_stride=16,max_samples_per_episode=32,learning_rate=3e-4,
-                           seed=2411,device='cuda'):
-    if (type(epochs) is not int or epochs<1 or type(batch_size) is not int or batch_size<1
-            or type(frame_stride) is not int or frame_stride<1
-            or type(max_samples_per_episode) is not int or max_samples_per_episode<1
-            or type(seed) is not int or seed<0 or not math.isfinite(learning_rate)
-            or learning_rate<=0):
-        raise ValueError('Invalid RGB XY training parameters')
-    output=Path(output_dir).resolve()
-    if output.exists() and any(output.iterdir()):
-        raise ValueError('RGB XY training output must be empty')
-    payload,train=_pixel_dataset(manifest_path,'train',frame_stride=frame_stride,
-                                 max_samples_per_episode=max_samples_per_episode)
-    _,validation=_pixel_dataset(manifest_path,'validation',frame_stride=frame_stride,
-                                max_samples_per_episode=max_samples_per_episode)
-    semantics=payload['semantics']
-    if train.image_size!=validation.image_size:
-        raise ValueError('Train and validation image sizes differ')
-    device=torch.device(device)
-    if device.type=='cuda' and not torch.cuda.is_available():
-        raise ValueError('CUDA requested but unavailable')
-    torch.set_num_threads(1)
-    torch.manual_seed(seed)
-    rng=np.random.default_rng(seed)
-    train_targets=np.stack([target for _,_,target in train.samples]).astype(np.float64)
-    mean=train_targets.mean(axis=0)
-    scale=np.maximum(train_targets.std(axis=0),.01)
-    normalized_train=(train_targets-mean)/scale
-    validation_targets=np.stack([target for _,_,target in validation.samples]).astype(np.float64)
-    normalized_validation=(validation_targets-mean)/scale
-    network=RGBXYNetwork(semantics['image_size']).to(device)
-    optimizer=torch.optim.AdamW(network.parameters(),lr=learning_rate,weight_decay=1e-5)
-    output.mkdir(parents=True,exist_ok=True)
-    history=[]
-    best_validation=float('inf')
-    best_path=output/'best.pt'
-    for epoch in range(epochs):
-        network.train()
-        permutation=rng.permutation(len(train))
-        train_loss=[]
-        for start in range(0,len(permutation),batch_size):
-            indices=permutation[start:start+batch_size]
-            batch=[train[int(i)] for i in indices]
-            images=torch.as_tensor(np.stack([row[0] for row in batch]),dtype=torch.float32,device=device)/255.
-            targets=torch.as_tensor(normalized_train[indices],dtype=torch.float32,device=device)
-            optimizer.zero_grad(set_to_none=True)
-            prediction=network(images)
-            loss=F.smooth_l1_loss(prediction,targets,beta=.5)
-            if not torch.isfinite(loss):
-                raise RuntimeError('Nonfinite RGB XY training loss')
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(network.parameters(),5.,error_if_nonfinite=True)
-            optimizer.step()
-            train_loss.append(float(loss.detach()))
-        metrics=_evaluate(network,validation,mean,scale,device,batch_size)
-        row={'epoch':epoch+1,'training_smooth_l1':float(np.mean(train_loss)),
-             'validation':metrics}
-        history.append(row)
-        if metrics['episode_mean_planar_error_m']<best_validation:
-            best_validation=metrics['episode_mean_planar_error_m']
-            train_ids=sorted({episode_id for episode_id,_,_ in train.samples})
-            validation_ids=sorted({episode_id for episode_id,_,_ in validation.samples})
-            train_hashes={row['episode_id']:row['sha256'] for row in train.rows}
-            validation_hashes={row['episode_id']:row['sha256'] for row in validation.rows}
-            metadata=RGBXYMetadata(
-                model_version=f'rgbxy-{seed}-{epoch+1}-{sha256_file(manifest_path)[:12]}',
-                dataset_sha256=sha256_file(manifest_path),image_size=semantics['image_size'],
-                camera=semantics['camera'],camera_fovy_deg=semantics['camera_fovy_deg'],
-                world_mean_xy_m=tuple(mean.tolist()),world_scale_xy_m=tuple(scale.tolist()),
-                training_episode_ids=tuple(train_ids),
-                training_episode_sha256=tuple(train_hashes[key] for key in train_ids),
-                validation_episode_ids=tuple(validation_ids),
-                validation_episode_sha256=tuple(validation_hashes[key] for key in validation_ids),
-                frame_stride=frame_stride,max_samples_per_episode=max_samples_per_episode,
-                red_pixel_range=(8,4096),visual_domain_sha256=_visual_domain_sha256(payload))
-            torch.save({'state_dict':network.cpu().state_dict(),'metadata':asdict(metadata),
-                        'training_config':{'epochs':epochs,'batch_size':batch_size,
-                            'frame_stride':frame_stride,'max_samples_per_episode':max_samples_per_episode,
-                            'learning_rate':learning_rate,'seed':seed},
-                        'selected_epoch':epoch+1},best_path)
-            network.to(device)
-        atomic_json(output/'history.json',history)
-    return {'checkpoint':str(best_path),'best_validation_episode_mean_planar_error_m':best_validation,
-            'selected_epoch':torch.load(best_path,map_location='cpu',weights_only=False)['selected_epoch'],
-            'training_samples':len(train),'validation_samples':len(validation),
-            'training_episodes':len(train.rows),'validation_episodes':len(validation.rows),
-            'dataset_sha256':sha256_file(manifest_path)}
 
 
 def _load_localizer_split(manifest_path,checkpoint_path,split,*,frame_stride,

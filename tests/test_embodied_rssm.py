@@ -268,7 +268,5 @@ class EmbodiedRSSMTests(unittest.TestCase):
                 self.assertTrue(report['within_budget'])
                 self.assertGreaterEqual(report['total'], lower)
                 self.assertLessEqual(report['total'], upper)
-                payload = json.loads((Path(__file__).resolve().parents[1] / 'configs' / 'training' / f'embodied_{name}.json').read_text())
-                self.assertEqual(asdict(config.ScalableConfig(**payload)), asdict(cfg))
         member = self.member()
         self.assertEqual(rssm.parameter_report(member.config)['total'], sum(p.numel() for p in member.parameters()))

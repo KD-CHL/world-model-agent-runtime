@@ -40,10 +40,11 @@ Agent 对模型报告只消费结构化预测；它不直接控制仿真器。�
 
 ## 采样、训练与评估命令
 
-在 Ubuntu 项目环境安装 MuJoCo 采样依赖；训练神经网络时另装 learning extra：
+在运行仓库根目录安装模型推理和 MuJoCo 依赖；训练 extra 从独立训练项目安装：
 
 ```bash
-python -m pip install -e '.[simulation,learning]'
+python -m pip install -e '.[model-runtime,simulation]'
+python -m pip install -e '../world-model-training[learning]'
 python ../world-model-training/scripts/collect.py --config configs/robots/interface_probe.json --output runs/probe/transitions.jsonl --episodes 10 --steps-per-episode 8 --seed 4
 python ../world-model-training/scripts/train.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.json --seed 4
 python ../world-model-training/scripts/train_neural_dynamics.py --dataset runs/probe/transitions.jsonl --checkpoint runs/probe/model.pt --members 5 --epochs 100 --seed 4

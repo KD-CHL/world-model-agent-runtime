@@ -6,10 +6,10 @@
 |---|---|---|---|
 | M0 ROS 与接口验证 | ros2/wmal_interfaces + interface_probe.xml | Ubuntu 构建接口，验证 reset/action/state 及旧命令拒绝 | ROS 缺失时以本地 MuJoCo 和 HTTP 为限 |
 | M1 机器人及场景确定 | configs/robots | 引入许可清楚的资产、关节限位和执行器映射 | 保留单关节探针作通信演示 |
-| M2 训练与数据闭环 | scripts/collect.py、scripts/train.py、scripts/evaluate.py | 单关节探针已跑通；继续扩展可恢复训练、真实任务状态与多种子统计 | 先状态预测和低维目标 |
+| M2 训练与数据闭环 | ../world-model-training/scripts/collect.py、../world-model-training/scripts/train.py、../world-model-training/scripts/evaluate.py | 单关节探针已跑通；继续扩展可恢复训练、真实任务状态与多种子统计 | 先状态预测和低维目标 |
 | M3 高层任务 Agent | scripts/run_agent.py | 扩充目标表示、场景检测和技能校验 | 当前 joint_goal 作为协议基线 |
 | M4 Go2/G1 控制 | robot adapter + locomotion plugin | 按真实资产验证关节/速度命令、重置与稳定性 | 无步态插件时禁用 base_velocity |
-| M5 论文实验 | scripts/evaluate.py、scripts/export_results.py | 冻结多种子评估、对照、原始表、失败回放 | 场景和假设确定后设计 |
+| M5 论文实验 | ../world-model-training/scripts/evaluate.py、scripts/export_results.py | 冻结多种子评估、对照、原始表、失败回放 | 场景和假设确定后设计 |
 
 ## 预算估计方法
 

@@ -1,5 +1,7 @@
 # 可规模化世界模型、独立评估与持续 Agent 会话
 
+拆分后，以下命令从运行仓库根目录执行。采集与训练入口在相邻的 `world-model-training`；先按 [运行项目安装说明](../README.md) 安装运行依赖，再执行 `python -m pip install -e '../world-model-training[learning]'`。数据和输出仍由各命令显式指定。
+
 ## 研究边界与模块
 
 主问题是：当后果预测有误差时，Agent能否用冻结、独立校准的误差界选择执行长度并及时重新规划。
@@ -51,36 +53,36 @@ train/validation/calibration/test按原始episode拆分，原始ID、内容hash�
 采集新数据、32个实际动作保证T32训练窗；固定控制器与局部适用范围。
 
 ```bash
-python scripts/visual_world.py collect \
+python ../world-model-training/scripts/visual_world.py collect \
   --output data/local/embodied_gc2_repro \
   --task stack_block --episodes 40 --steps 32 --image-size 32 --seed 1171 \
   --controller gravity_compensated --target-low .21 .73 --target-high .49 1.01
 
-python scripts/embodied_world.py inspect \
+python ../world-model-training/scripts/embodied_world.py inspect \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta
 
-python scripts/embodied_world.py profile \
+python ../world-model-training/scripts/embodied_world.py profile \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
-  --network-config configs/training/embodied_smoke.json \
+  --network-config ../world-model-training/configs/training/embodied_smoke.json \
   --device cuda --precision bfloat16 --members 3 --batch-size 2 --accumulation 4 \
   --output runs/embodied_resource_repro.json
 
-python scripts/embodied_world.py train \
+python ../world-model-training/scripts/embodied_world.py train \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
-  --network-config configs/training/embodied_smoke.json \
+  --network-config ../world-model-training/configs/training/embodied_smoke.json \
   --device cuda --precision bfloat16 --epochs 1 --members 1 --batch-size 2 --accumulation 4 \
   --output runs/embodied_smoke_repro
 
-python scripts/embodied_world.py calibrate \
+python ../world-model-training/scripts/embodied_world.py calibrate \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
   --model runs/embodied_smoke_repro/model.pt --device cuda --samples 8 --mode sample --alpha .2 \
   --output runs/embodied_calibration_repro.json
 
-python scripts/embodied_world.py evaluate \
+python ../world-model-training/scripts/embodied_world.py evaluate \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
   --model runs/embodied_smoke_repro/model.pt --calibration runs/embodied_calibration_repro.json \
@@ -100,10 +102,10 @@ validation只按物理预测指标选epoch；冻结选型后calibration拟合区
 已完成训练的同配置续训不会自动追加epoch，修改epoch应新开微调实验。
 
 ```bash
-python scripts/embodied_world.py train \
+python ../world-model-training/scripts/embodied_world.py train \
   --manifest data/local/embodied_gc2_repro/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
-  --network-config configs/training/embodied_smoke.json \
+  --network-config ../world-model-training/configs/training/embodied_smoke.json \
   --device cuda --precision bfloat16 --epochs 1 --members 1 --batch-size 2 --accumulation 4 \
   --output runs/embodied_smoke_repro --resume runs/embodied_smoke_repro/training.pt
 ```
@@ -113,10 +115,10 @@ python scripts/embodied_world.py train \
 冻结编码器可在训练协议JSON设`"freeze_encoder": true`，其tensor保持不变；其余模型依然训练。
 
 ```bash
-python scripts/embodied_world.py train \
+python ../world-model-training/scripts/embodied_world.py train \
   --manifest data/local/embodied_gc2_finetune/manifest.json \
   --legacy-physical-indices 0,1 --legacy-command-indices 2,3 --legacy-command-rule joint_delta \
-  --network-config configs/training/embodied_smoke.json \
+  --network-config ../world-model-training/configs/training/embodied_smoke.json \
   --device cuda --precision bfloat16 --epochs 1 --members 1 --batch-size 2 --accumulation 4 \
   --pretrained runs/embodied_smoke_repro/model.pt --output runs/embodied_finetune_repro
 ```
@@ -132,15 +134,15 @@ profile其余成员是独立随机探测对象，不是已训练的研究模型�
 以下命令仅供已有八卡服务器的`wmal`环境使用。先准备128px、同一profile的新原生manifest `data/local/embodied_server/manifest.json`（不能使用上述32px数据），未在本机执行。
 
 ```bash
-torchrun --standalone --nproc-per-node=8 scripts/embodied_world.py profile \
+torchrun --standalone --nproc-per-node=8 ../world-model-training/scripts/embodied_world.py profile \
   --manifest data/local/embodied_server/manifest.json \
-  --network-config configs/training/embodied_base.json \
+  --network-config ../world-model-training/configs/training/embodied_base.json \
   --device cuda --distributed ddp --precision bfloat16 \
   --members 3 --batch-size 2 --accumulation 4 --output runs/embodied_base_gpu8_probe.json
 
-torchrun --standalone --nproc-per-node=8 scripts/embodied_world.py train \
+torchrun --standalone --nproc-per-node=8 ../world-model-training/scripts/embodied_world.py train \
   --manifest data/local/embodied_server/manifest.json \
-  --network-config configs/training/embodied_base.json \
+  --network-config ../world-model-training/configs/training/embodied_base.json \
   --device cuda --distributed ddp --precision bfloat16 \
   --members 3 --batch-size 2 --accumulation 4 --output runs/embodied_base_gpu8
 ```

@@ -33,56 +33,6 @@ class ControllerCalibrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate(calibration, {'profile': 'g1_joint_pd_v1'})
 
-    def test_controller_transfer_needs_explicit_opt_in_and_binds_new_calibration(self):
-        import torch
-        from test_visual_world import make_dataset
-        from wmal.logging.manifest import atomic_json
-        from wmal.models.visual_latent import NetworkConfig, VisualLatentMember, VisualWorldModel
-        from wmal.models.horizon_calibration import calibrate_visual
-        from wmal.datasets.visual_sequences import VisualDataset
-        import json
-        torch.set_num_threads(1)
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            manifest=make_dataset(root)
-            dataset=VisualDataset(manifest,'train',horizon=2)
-            config=NetworkConfig(2,2,image_size=32,latent_dim=8,hidden_dim=16)
-            model=VisualWorldModel(config,dataset.semantics,dataset.normalization(),
-                [VisualLatentMember(config),VisualLatentMember(config)],
-                metadata={'max_horizon':2,'training_episode_ids':[],'selection_episode_ids':[]})
-            model.save(root/'frozen.pt')
-            payload=json.loads(manifest.read_text())
-            profile={'profile':'g1_joint_pd_gravity_v2','parameters_sha256':'fixed-gains'}
-            payload['source']['controller_profile']=profile
-            atomic_json(manifest,payload)
-            with self.assertRaisesRegex(ValueError,'transfer'):
-                calibrate_visual(manifest,root/'frozen.pt',root/'denied.json',horizon=2,alpha=.2)
-            self.assertFalse((root/'denied.json').exists())
-            try:
-                result=calibrate_visual(manifest,root/'frozen.pt',root/'bound.json',horizon=2,
-                                        alpha=.2,allow_controller_transfer=True)
-            except TypeError as exc:
-                self.fail(f'Explicit controller transfer calibration is unavailable: {exc}')
-            self.validate(result,profile)
-            self.assertEqual(result.model_version,model.version)
-            self.assertEqual(set(result.episode_ids),{'calibration_0','calibration_1',
-                                                     'calibration_2','calibration_3','calibration_4'})
-            from wmal.training.visual_trainer import evaluate_visual
-            with self.assertRaisesRegex(ValueError,'transfer'):
-                evaluate_visual(manifest,root/'frozen.pt',horizon=2,calibration=root/'bound.json')
-            try:
-                metrics=evaluate_visual(manifest,root/'frozen.pt',horizon=2,calibration=root/'bound.json',
-                                        allow_controller_transfer=True)
-            except TypeError as exc:
-                self.fail(f'Explicit frozen-controller evaluation is unavailable: {exc}')
-            self.assertEqual(metrics['controller_profile'],profile)
-            self.assertTrue(metrics['controller_transfer'])
-            self.assertEqual(metrics['episodes'],2)
-            stale=replace(result,controller_profile=None)
-            stale.save(root/'stale.json')
-            with self.assertRaisesRegex(ValueError,'controller mismatch'):
-                evaluate_visual(manifest,root/'frozen.pt',horizon=2,calibration=root/'stale.json',
-                                allow_controller_transfer=True)
 
     def test_local_calibration_rejects_out_of_domain_context_or_commands(self):
         import numpy as np
