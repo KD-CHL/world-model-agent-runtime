@@ -19,7 +19,7 @@
 | 09_return | 绕障往返 | (4,0)→(0,0) | 同会话往返与误差累积 |
 | 10_delivery | 多站点配送路线 | (0.5,-1.5)→(3.2,-0.9)→(4,0) | 多阶段障碍路径 |
 
-“配送”表示访问站点，当前不包含物体搬运、抓取或负载动力学。全部是静态已知地图，位置容差 0.15 米，朝向容差 0.15 弧度。实验列表与每阶段预算在 `configs/g1_experiments.json`。
+“配送”表示访问站点，当前不包含物体搬运、抓取或负载动力学。全部是静态已知地图，位置容差 0.15 米，朝向容差 0.15 弧度。实验列表与每阶段预算在 `../world-model-training/configs/g1_experiments.json`。
 
 ## Agent 架构
 
@@ -46,12 +46,14 @@
 ## 命令
 
 ```bash
-cd /home/chl/GitHub/CodeSpace/world-model-agent-lab-main
+# 当前目录：运行仓库 world-model-agent-lab 根目录
 conda activate wmal
 export PYTHONPATH="$PWD/src"
 
 # 使用已采集的数据训练优化版本，保留原模型
-python ../world-model-training/scripts/g1_research.py train --optimize --checkpoint runs/g1_research/optimized.json
+python ../world-model-training/scripts/g1_research.py train --optimize \
+  --dataset data/g1_locomotion/transitions.json \
+  --checkpoint runs/g1_research/optimized.json
 
 # 十项实验，每项三个规划随机种子
 python ../world-model-training/scripts/g1_benchmark.py --checkpoint runs/g1_research/optimized.json \

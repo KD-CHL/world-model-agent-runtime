@@ -32,21 +32,28 @@ MuJoCo + 已训练低层行走策略 → 状态/速度指令/下一状态 → ep
 
 ## 完整命令
 
-在项目根目录执行：
+在运行仓库 `world-model-agent-lab` 根目录执行；先按 [安装说明](../README.md) 安装运行依赖，并执行 `python -m pip install -e '../world-model-training[learning]'`。以下显式路径均相对于运行仓库根目录；训练 CLI 未指定路径时的默认值仍属于训练仓库。
 
 ```bash
 conda activate wmal
 export PYTHONPATH="$PWD/src"
 
 # 采集；每个 episode 重新初始化机器人
-python ../world-model-training/scripts/g1_research.py collect --episodes 12 --steps 30 --seed 0
+python ../world-model-training/scripts/g1_research.py collect \
+  --dataset data/g1_locomotion/transitions.json --episodes 12 --steps 30 --seed 0
 
 # 训练并输出验证/测试指标
-python ../world-model-training/scripts/g1_research.py train --seed 0
+python ../world-model-training/scripts/g1_research.py train \
+  --dataset data/g1_locomotion/transitions.json \
+  --checkpoint runs/g1_research/model.json --seed 0
 
 # 在同一目标上分别运行无反馈和有反馈版本
-python ../world-model-training/scripts/g1_research.py evaluate --steps 100 --seed 0
-python ../world-model-training/scripts/g1_research.py evaluate --steps 100 --seed 0 --feedback
+python ../world-model-training/scripts/g1_research.py evaluate \
+  --checkpoint runs/g1_research/model.json \
+  --log runs/g1_research/evaluation.jsonl --steps 100 --seed 0
+python ../world-model-training/scripts/g1_research.py evaluate \
+  --checkpoint runs/g1_research/model.json \
+  --log runs/g1_research/evaluation_feedback.jsonl --steps 100 --seed 0 --feedback
 
 # 打开常驻交互窗口；目标完成后可继续输入新目标
 python scripts/g1_agent_sim.py --config configs/g1_research.json
@@ -54,9 +61,9 @@ python scripts/g1_agent_sim.py --config configs/g1_research.json
 
 窗口提示 `goal>` 时输入 `1 0`（世界坐标目标），或 `1 0 90`（再约束朝向角度）。输入 `quit` 退出。等待输入时仿真暂停，窗口保持打开。
 
-采集数据：`data/g1_locomotion/transitions.json`；训练权重：`runs/g1_research/model.json`；报告：同名 `.report.json`；评估与交互日志位于 `runs/g1_research/`。数据与模型均受现有 Git 排除规则保护。
+上述命令将采集数据写入运行仓库的 `data/g1_locomotion/transitions.json`，训练权重写入 `runs/g1_research/model.json`，报告写入 `runs/g1_research/model.json.report.json`。该权重路径与 `configs/g1_research.json`、`configs/g1_indoor.json` 一致。无反馈/有反馈评估日志分别为 `runs/g1_research/evaluation.jsonl` 和 `runs/g1_research/evaluation_feedback.jsonl`；交互日志为 `runs/g1_research/interactive.jsonl`。数据与模型均受现有 Git 排除规则保护。
 
-适配另一个环境采集的数据：
+适配另一个环境采集的数据（先将该环境的转移记录保存为运行仓库的 `data/g1_locomotion/new_transitions.json`）：
 
 ```bash
 python ../world-model-training/scripts/g1_research.py train \
@@ -64,6 +71,8 @@ python ../world-model-training/scripts/g1_research.py train \
   --prior runs/g1_research/model.json \
   --checkpoint runs/g1_research/adapted.json
 ```
+
+适配权重和报告分别写入运行仓库的 `runs/g1_research/adapted.json` 和 `runs/g1_research/adapted.json.report.json`；默认交互配置仍加载 `model.json`，使用适配模型时需显式修改配置的 checkpoint。
 
 这是以已有集成平均权重为正则化中心的参数适配。训练仅用 train episodes；validation 与 test 只做指标计算。每个数据集至少三个独立 episode，训练至少十条转移；动作持续时间必须一致。测试集不能用于选超参数。
 
