@@ -19,7 +19,8 @@ ACTION_SCHEMA='wmal.g1.workcell.target_delta.v1'
 
 class VisualWorkcellSession:
     def __init__(self,task='stack_block',*,image_size=64,camera='workcell_overview',period_s=.2,seed=0,
-                 frame_publisher=None,realtime=False,controller='legacy'):
+                 frame_publisher=None,realtime=False,controller='legacy',
+                 owns_frame_publisher=True,video_frame_sink=None):
         import mujoco
         from wmal.envs.workcell import build_workcell
         if image_size not in (32,64,128) or not np.isfinite(period_s) or period_s<=0 or period_s>1:
@@ -49,6 +50,8 @@ class VisualWorkcellSession:
         self.renderer=mujoco.Renderer(self.model,height=image_size,width=image_size)
         self.viewer=None
         self.frame_publisher=frame_publisher
+        self.owns_frame_publisher=owns_frame_publisher
+        self.video_frame_sink=video_frame_sink
         self.monitor_renderer=None
         self.realtime=bool(realtime)
         self.fault_reason=None
@@ -132,7 +135,7 @@ class VisualWorkcellSession:
         state=np.concatenate([self.data.qpos[self.qadr],self.data.ctrl[self.aids]]).astype('float32')
         return VisualObservation(self.episode_id,self.step_id,rgb,state)
 
-    def execute_actions(self,actions,*,episode_id,step_id,on_observation=None):
+    def execute_actions(self,actions,*,episode_id,step_id,on_observation=None,cancel_requested=None):
         """Execute committed deltas; optional trace sink receives each actual endpoint.
 
         A failed sink aborts the session just like a controller failure; do not
@@ -150,6 +153,9 @@ class VisualWorkcellSession:
             raise ValueError('Full committed prefix violates local joint envelope')
         try:
             for target in targets:
+                if cancel_requested is not None and cancel_requested():
+                    self.abort('cancelled')
+                    break
                 started=time.monotonic()
                 self.data.ctrl[self.aids]=target
                 self._step_physics(self.physics_steps)
@@ -159,14 +165,28 @@ class VisualWorkcellSession:
                 if on_observation is not None:
                     on_observation(self.observe())
                 self.publish_monitor_frame()
+                self.capture_video_frame()
                 if self.viewer is not None:
                     self.viewer.sync()
                 if self.realtime:
                     time.sleep(max(0.,self.period_s-(time.monotonic()-started)))
+            if cancel_requested is not None and cancel_requested():
+                self.abort('cancelled')
             return self.observe()
         except (Exception,KeyboardInterrupt):
             self.abort('execution_failed')
             raise
+
+    def capture_video_frame(self, force=False):
+        """Capture actual owner-thread RGB; sink is independent of monitor rate."""
+        if self.video_frame_sink is None and not force:
+            return None
+        self.renderer.update_scene(self.data,camera=self.camera)
+        rgb=self.renderer.render().copy()
+        now=float(self.data.time)
+        if self.video_frame_sink is not None:
+            self.video_frame_sink(rgb,now)
+        return rgb,now
 
     def abort(self,reason='execution_failed'):
         """Cancel pending servo targets and freeze physics until explicit scene reset."""
@@ -195,7 +215,7 @@ class VisualWorkcellSession:
         return self.viewer
 
     def close(self):
-        if self.frame_publisher is not None:
+        if self.frame_publisher is not None and self.owns_frame_publisher:
             self.frame_publisher.close()
         if self.monitor_renderer is not None:
             self.monitor_renderer.close()

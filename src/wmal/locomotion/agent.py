@@ -36,16 +36,33 @@ class G1Agent:
                 and abs(state.roll) <= self.max_tilt_rad
                 and abs(state.pitch) <= self.max_tilt_rad)
 
-    def run_goal(self, goal, session, max_cycles=100):
+    def run_goal(self, goal, session, max_cycles=100, *, cancel_requested=None):
         if not isinstance(goal, G1Goal) or type(max_cycles) is not int or max_cycles < 1:
             raise ValueError('A G1Goal and positive cycle budget are required')
         cycles, previous = 0, None
+        state = None
+        active_plan = None
+        cancelled = cancel_requested or (lambda: False)
+        def cancelled_result():
+            if hasattr(session, 'stop'):
+                session.stop()
+            actual = session.observe()
+            before = (previous if active_plan is not None and previous is not None
+                      and previous.step_id == active_plan.observation_step else state)
+            self.log('cancelled', {'final_state': asdict(actual), 'cycles': cycles,
+                                   'before': asdict(before) if before is not None else None,
+                                   'planned_action': asdict(active_plan.action) if active_plan is not None else None,
+                                   'partial_motion': bool(before is not None and actual.sim_time_s > before.sim_time_s),
+                                   'actual_duration_s': max(0., actual.sim_time_s-before.sim_time_s) if before is not None else 0.})
+            return G1TaskResult('cancelled', cycles, 'Cancelled at safe control boundary', actual)
         try:
             state = session.observe()
             if not isinstance(state, G1State):
                 raise ValueError('Simulator returned an incompatible G1 observation')
             episode = state.episode_id
             while True:
+                if cancelled():
+                    return cancelled_result()
                 if not getattr(session, 'is_running', True):
                     return G1TaskResult('stopped', cycles, 'Simulation session is not running', state)
                 if not self._safe(state):
@@ -60,7 +77,10 @@ class G1Agent:
                     return G1TaskResult('budget_exhausted', cycles, 'Goal not reached within cycle budget', state)
                 planning_start = time.perf_counter()
                 plan = self.planner.plan(state, goal)
+                active_plan = plan
                 planning_latency_s = time.perf_counter() - planning_start
+                if cancelled():
+                    return cancelled_result()
                 if self.feedback is not None and getattr(self.feedback, 'calibration', None) is not None:
                     self.feedback.calibration.validate_for(plan.model_version, plan.action.duration_s)
                 if plan.observation_step != state.step_id:
@@ -78,10 +98,15 @@ class G1Agent:
                                   'planning_evidence': plan.evidence,
                                   'prediction_horizon_s': plan.horizon_steps * plan.action.duration_s,
                                   'prediction_state_schema': 'wmal.g1.base_state.v1'})
-                session.step(plan.action, plan.action.duration_s)
+                if cancel_requested is None:
+                    session.step(plan.action, plan.action.duration_s)
+                else:
+                    session.step(plan.action, plan.action.duration_s, cancel_requested=cancel_requested)
                 cycles += 1
                 previous = state
                 state = session.observe()
+                if cancelled():
+                    return cancelled_result()
                 if not isinstance(state, G1State):
                     raise ValueError('Simulator returned an incompatible G1 observation')
                 if (state.episode_id != previous.episode_id or state.step_id <= previous.step_id
@@ -118,4 +143,4 @@ class G1Agent:
             return G1TaskResult(status, cycles, status, state)
         except (ValueError, TypeError, RuntimeError, OSError) as exc:
             self.log('failure', {'error_type': type(exc).__name__, 'detail': str(exc)})
-            return G1TaskResult('failed', cycles, type(exc).__name__)
+            return G1TaskResult('failed', cycles, type(exc).__name__, state)

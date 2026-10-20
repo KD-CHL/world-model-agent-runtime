@@ -30,6 +30,20 @@
     <div class="metric"><span id="errorTitle">预测误差</span><strong id="errorMetric">—</strong><small id="errorHint">按指标单位分别统计</small></div>
   </section>
   <section data-view="workspace">
+    <article class="panel command-panel"><div class="panel-head"><div><h2>Agent 指令与仿真任务</h2><p class="muted small">仅执行本地能力清单中可用的模式；预测证据与真实观测分开记录。</p></div><span id="commandServiceStatus" class="badge">读取能力中</span></div>
+      <div id="commandNotice" class="notice" role="status" hidden></div>
+      <div class="command-grid">
+        <label>动作类型<select id="commandMode"><option value="g1_navigation">G1 行走 / 转向 / 坐标导航</option><option value="arm_joint_targets">双关节目标控制</option></select></label>
+        <label>自然语言指令<input id="commandText" maxlength="256" placeholder="例如：前进 0.4 米；肩关节到 0.45 rad，肘关节到 0.95 rad"></label>
+      </div>
+      <p id="modeAvailability" class="muted small">正在读取模型能力状态…</p>
+      <details id="structuredCommand"><summary>使用结构化目标</summary>
+        <div id="g1Fields" class="command-grid"><label>目标 X（米）<input id="goalX" type="number" min="-20" max="20" step="0.05" value="0.4"></label><label>目标 Y（米）<input id="goalY" type="number" min="-20" max="20" step="0.05" value="0"></label><label>朝向（度，可选）<input id="goalYaw" type="number" min="-180" max="180" step="5" placeholder="不指定"></label></div>
+        <div id="armFields" class="command-grid" hidden><label>肩关节（rad）<input id="shoulderGoal" type="number" min="0.05" max="0.65" step="0.01" value="0.45"></label><label>肘关节（rad）<input id="elbowGoal" type="number" min="0.55" max="1.15" step="0.01" value="0.95"></label><label>策略<select id="armBaseline"><option>A3</option><option>A2</option><option>A1</option><option>A0</option></select></label><label>预测步长<input id="armHorizon" type="number" min="1" max="12" value="4"></label></div>
+      </details>
+      <div class="command-actions"><button id="submitCommand" class="primary">下发动作</button><span id="commandHint" class="muted small">每次提交按服务端任务状态确认，不由页面推断结果。</span></div>
+      <div class="divider"></div><div class="panel-head"><h3>当前与最近任务</h3><button id="refreshTasks">刷新任务</button></div><div id="liveTaskList" class="live-task-list"><p class="muted">暂无任务记录</p></div>
+    </article>
     <div class="flow" id="flow"><span>观测</span><i>→</i><span>候选计划</span><i>→</i><span>世界模型评估</span><i>→</i><span>动作执行</span><i>→</i><span>真实反馈</span></div>
     <div class="workspace-grid">
       <article class="panel camera-panel"><div class="panel-head"><h2>MuJoCo 仿真画面</h2><span id="frameStatus" class="badge">未接入实时帧</span></div>

@@ -14,7 +14,8 @@ from wmal.locomotion.contracts import G1State, G1VelocityAction
 class G1MuJoCoSession(AbstractContextManager):
     """Long-lived simulator; task completion never owns or closes this session."""
 
-    def __init__(self, *, viewer=True, realtime=True, scene=None, frame_publisher=None):
+    def __init__(self, *, viewer=True, realtime=True, scene=None, frame_publisher=None,
+                 owns_frame_publisher=True, video_frame_sink=None):
         try:
             import mujoco
         except ImportError as exc:
@@ -49,6 +50,10 @@ class G1MuJoCoSession(AbstractContextManager):
         self.realtime = bool(realtime)
         self.closed = False
         self.frame_publisher = frame_publisher
+        self.owns_frame_publisher = owns_frame_publisher
+        self.video_frame_sink = None
+        self._video_last_time = None
+        self._video_renderer = None
         self.monitor_renderer = None
         self.viewer = None
         self.viewer_context = None
@@ -77,6 +82,9 @@ class G1MuJoCoSession(AbstractContextManager):
         except Exception:
             self.close()
             raise
+        self.video_frame_sink = video_frame_sink
+        if video_frame_sink is not None:
+            self.capture_video_frame(force=True)
 
     @property
     def is_running(self):
@@ -109,6 +117,7 @@ class G1MuJoCoSession(AbstractContextManager):
                 time.sleep(remaining)
         state = self.observe()
         self.publish_monitor_frame()
+        self.capture_video_frame()
         if self.scene is not None and not self.scene.segment_free((state.x, state.y), (state.x, state.y)):
             raise RuntimeError('G1 entered obstacle clearance margin')
         if state.pelvis_height < 0.48 or abs(state.roll) > 0.85 or abs(state.pitch) > 0.85:
@@ -168,7 +177,7 @@ class G1MuJoCoSession(AbstractContextManager):
             float(spatial_velocity[5]), float(spatial_velocity[2]), roll, pitch,
             float(self.data.qpos[2]), positions, self._contacts())
 
-    def step(self, action, duration_s=None):
+    def step(self, action, duration_s=None, *, cancel_requested=None):
         if self.closed:
             raise RuntimeError('G1 session is closed')
         if not self.is_running:
@@ -182,12 +191,51 @@ class G1MuJoCoSession(AbstractContextManager):
         if intervals < 1 or abs(intervals * POLICY_DT - duration) > 1e-9:
             raise ValueError('Action duration must be an exact multiple of the policy period')
         self.policy.set_velocity(action.vx, action.vy, action.yaw_rate)
+        completed = 0
         for _ in range(intervals):
+            if cancel_requested is not None and cancel_requested():
+                self.stop()
+                break
             self._control_interval()
+            completed += 1
+        if cancel_requested is not None and cancel_requested():
+            self.stop()
         # Agent-visible step IDs count completed action chunks, not 20ms policy ticks.
-        self.step_id += 1
+        if completed:
+            self.step_id += 1
+        if self.video_frame_sink is not None:
+            self.capture_video_frame(force=True)
         self.publish_monitor_frame(force=True)
         return self.observe()
+
+    def stop(self):
+        """Remove velocity command without advancing physics or losing partial motion."""
+        if not self.closed:
+            self.policy.set_velocity(0., 0., 0.)
+
+    def capture_video_frame(self, force=False):
+        """Owner-only RGB capture independent of wall-clock monitor throttling."""
+        if self.video_frame_sink is None and not force:
+            return None
+        now = float(self.data.time)
+        if not force and self._video_last_time is not None and now-self._video_last_time < .08-1e-9:
+            return None
+        if self._video_renderer is None:
+            self._video_renderer = self.mj.Renderer(self.model, height=360, width=640)
+        camera = self.mj.MjvCamera()
+        camera.type = self.mj.mjtCamera.mjCAMERA_FREE
+        camera.lookat[:] = self.data.qpos[:3]
+        camera.distance, camera.azimuth, camera.elevation = 3.2, 135, -18
+        if self.scene is not None:
+            camera.distance, camera.elevation = 9., -65
+            camera.lookat[:] = [2., 0., .3]
+        self._video_renderer.update_scene(self.data, camera=camera)
+        rgb = self._video_renderer.render().copy()
+        previous_time = self._video_last_time
+        self._video_last_time = now
+        if self.video_frame_sink is not None and (previous_time is None or now > previous_time):
+            self.video_frame_sink(rgb, now)
+        return rgb, now
 
     def set_goal_marker(self, goal):
         site = self.mj.mj_name2id(self.model, self.mj.mjtObj.mjOBJ_SITE, 'navigation_goal')
@@ -199,8 +247,11 @@ class G1MuJoCoSession(AbstractContextManager):
         if self.closed:
             return
         self.closed = True
-        if self.frame_publisher is not None:
+        if self.frame_publisher is not None and self.owns_frame_publisher:
             self.frame_publisher.close()
+        if self._video_renderer is not None:
+            self._video_renderer.close()
+            self._video_renderer = None
         if self.monitor_renderer is not None:
             self.monitor_renderer.close()
             self.monitor_renderer = None

@@ -79,7 +79,7 @@ def fixed_joint_plan(start,goal,budget):
 
 
 def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_budget,seed,log,artifact_dir,
-             waypoints=()):
+             waypoints=(),cancel_requested=None,on_event=None):
     goal=np.asarray(goal,dtype=float)
     if goal.shape!=(2,) or not np.isfinite(goal).all() or np.any(goal<TARGET_LOW) or np.any(goal>TARGET_HIGH):
         raise ValueError('Goal must contain shoulder/elbow targets within the local envelope')
@@ -105,6 +105,15 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
                 'sim_time_s':float(session.data.time),**payload}
         log.write(json.dumps(record,ensure_ascii=False,allow_nan=False)+'\n')
         log.flush()
+        if on_event is not None:
+            on_event(event,record)
+    cancelled=cancel_requested or (lambda: False)
+    def stop_cancelled():
+        nonlocal observed
+        session.abort('cancelled')
+        observed=session.observe()
+        agent.state.status='cancelled'
+        emit('cancelled',{'observed_state':observed.state.tolist()})
     emit('task_started',{'schema':'wmal.monitor.task.v1','goal':state_goal.tolist(),
                         'baseline':baseline,'max_cycles':max_cycles,'callable_skills':list(task.callable_skills),
                         'model_version':model.version,'semantics':session.semantics,
@@ -124,6 +133,9 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
     started=time.perf_counter()
     reobservations=0
     for cycle in range(max_cycles+3):
+        if cancelled():
+            stop_cancelled()
+            break
         if agent.state.status!='running':
             break
         if frozen is not None:
@@ -132,6 +144,9 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
         else:
             available=candidates(observed,agent.active_stage.target,horizon,rng)
         decision=agent.plan(observed,available)
+        if cancelled():
+            stop_cancelled()
+            break
         record={'cycle':cycle,'episode_id':observed.episode_id,'step_id':observed.step_id,
                 'decision_id':decision.decision_id,'status':decision.status,'prefix_length':decision.prefix_length,
                 'skill':decision.skill,'actions':decision.actions.tolist(),'model_version':decision.model_version,
@@ -154,6 +169,8 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
         trace=[]
         try:
             options={'on_observation':trace.append} if agent.context_steps else {}
+            if cancel_requested is not None:
+                options['cancel_requested']=cancel_requested
             observed=session.execute_actions(decision.actions,episode_id=decision.episode_id,step_id=decision.step_id,
                                              **options)
         except (ValueError,RuntimeError):
@@ -162,6 +179,9 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
             agent.record_execution_failure(decision,observed,'controller_rejected_or_failed')
             emit('execution_failed',{'decision_id':decision.decision_id,'reason':'controller_rejected_or_failed',
                                      'state':asdict(agent.state)})
+            break
+        if cancelled():
+            stop_cancelled()
             break
         feedback=agent.record_feedback(decision,observed,observations=trace if agent.context_steps else None)
         # Concrete RGB evidence makes prediction/observation alignment inspectable.
@@ -186,7 +206,9 @@ def run_task(session,model,calibration,goal,*,baseline,horizon,max_cycles,error_
         emit('agent_state',{'state':asdict(agent.state)})
     result={'baseline':baseline,'seed':seed,'elapsed_s':time.perf_counter()-started,
             'model_version':model.version,'state':asdict(agent.state),
-            'goal_error_rad':float(np.linalg.norm(observed.state-state_goal))}
+            'goal_error_rad':float(np.linalg.norm(observed.state-state_goal)),
+            'final_observation':{'episode_id':observed.episode_id,'step_id':observed.step_id,
+                                 'state':observed.state.tolist(),'sim_time_s':float(session.data.time)}}
     emit('task_result',result)
     return result
 
